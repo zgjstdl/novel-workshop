@@ -166,6 +166,17 @@
   #p-choices{flex:0 0 auto;min-width:0;max-height:40vh;overflow-y:auto;overscroll-behavior:contain;
     padding-right:2px;scrollbar-width:thin}
   #p-log{flex:1 1 auto;overflow-y:auto;min-height:120px}
+  .msg.narr .prep{margin:2px 0;font-size:12.5px;letter-spacing:.06em;color:rgba(201,162,39,.75);
+    animation:breath 1.2s ease-in-out infinite}
+  @keyframes breath{0%,100%{opacity:.35}50%{opacity:.95}}
+  .msg.warnmeta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 10px;
+    padding:9px 13px;border-radius:10px;font-size:12.5px;line-height:1.5;
+    background:rgba(190,120,60,.10);border:1px solid rgba(200,140,70,.32);color:#d9b489}
+  .msg.warnmeta .wt{flex:1 1 auto;min-width:180px}
+  .msg.warnmeta .wbtn{flex:0 0 auto;padding:5px 12px;border-radius:8px;cursor:pointer;
+    background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.4);
+    color:#e2b866;font-size:12px;font-family:inherit}
+  .msg.warnmeta .wbtn:hover{background:rgba(201,162,39,.22)}
   #p-choices::-webkit-scrollbar{width:6px}
   #p-choices::-webkit-scrollbar-thumb{background:rgba(201,162,39,.28);border-radius:3px}
   #p-choices::-webkit-scrollbar-track{background:transparent}
@@ -631,7 +642,7 @@ function llm(messages, opt) {
     body.stream = true;
     body.stream_options = { include_usage: true };
   }
-  if (cfg.maxTok) body.max_tokens = cfg.maxTok;
+  body.max_tokens = opt.maxTok || cfg.maxTok || 2048;
 
   var headers = { "Content-Type": "application/json" };
   if (cfg.key) headers["Authorization"] = "Bearer " + cfg.key;
@@ -714,32 +725,44 @@ function normChoice(x) {
 }
 
 /* 一轮回复的解析：新协议（正文 + META 块）优先，旧协议（纯 JSON）兼容 */
+function packTurn(narr, obj) {
+  return {
+    narration: String(narr || "").trim(),
+    choices: obj && Array.isArray(obj.choices) ? obj.choices.slice(0, 5).map(normChoice).filter(Boolean) : [],
+    delta: obj && obj.delta && typeof obj.delta === "object" ? obj.delta : {},
+    quest: obj && obj.quest && typeof obj.quest === "object" ? obj.quest : null,
+    cast: obj && Array.isArray(obj.cast) ? obj.cast.slice(0, 4) : [],
+    hasMeta: !!obj
+  };
+}
+
 function parseTurn(raw) {
-  var s = String(raw || "");
+  var s = String(raw || "").trim();
+
+  // 新协议：META 在最前面，正文在后面
+  var head = s.match(/^<<<META\s*([\s\S]*?)\s*META>>>/i);
+  if (head) {
+    var o1 = null;
+    try { o1 = parseJSON(head[1]); } catch (e) { o1 = null; }
+    return packTurn(s.slice(head[0].length).trim(), o1);
+  }
+
+  // 旧协议：正文在前，META 在末尾
   var at = s.indexOf("<<<META");
-  if (at >= 0) {
+  if (at > 0) {
     var text = s.slice(0, at).trim();
     var tail = s.slice(at + 7).replace(/META\s*>>>?\s*$/, "").replace(/>>>\s*$/, "").trim();
     var obj = null;
     try { obj = parseJSON(tail); } catch (e) { obj = null; }
-    return {
-      narration: text,
-      choices: obj && Array.isArray(obj.choices) ? obj.choices.slice(0, 5).map(normChoice).filter(Boolean) : [],
-      delta: obj && obj.delta && typeof obj.delta === "object" ? obj.delta : {},
-      quest: obj && obj.quest && typeof obj.quest === "object" ? obj.quest : null,
-      cast: obj && Array.isArray(obj.cast) ? obj.cast.slice(0, 4) : []
-    };
+    return packTurn(text, obj);
   }
   var d = null;
   try { d = parseJSON(s); } catch (e) { d = null; }
   if (d && (d.narration || d.choices)) {
-    return {
-      narration: String(d.narration || "").trim(),
-      choices: Array.isArray(d.choices) ? d.choices.slice(0, 5).map(normChoice).filter(Boolean) : [],
-      delta: d.delta && typeof d.delta === "object" ? d.delta : {}
-    };
+    var t2 = packTurn(d.narration, d);
+    return t2;
   }
-  return { narration: s.trim(), choices: [], delta: {}, quest: null, cast: [] };
+  return { narration: s, choices: [], delta: {}, quest: null, cast: [], hasMeta: false };
 }
 
 function parseJSON(s) {
@@ -1618,19 +1641,13 @@ function buildSystem(w) {
     "· 每轮给 3 到 5 个选项，必须覆盖三种走向：一个「推进」（直接把局面往下推）、一个「代价」（做了要付代价、冒险或激怒某人）、一个「关系」（针对在场某个人的情感、试探或索取）。可以再加「观察」或「逃离」，但不要为了凑数硬编。",
     "· 选项必须从这一轮正文里的具体人、物、动作里长出来，写清对谁做什么。例：「按住她的手腕，把袖子往上推一截」。禁止写「继续」「观察四周」「开口说话」这类放在任何场景都成立的空话。",
     "· 选项之间的后果必须真的不同：不同的对象、不同的风险、不同的收益。不要给三个同一方向的变体。",
-    "· 正文写多长都可以，但 <<<META 块必须出现在全部正文之后，不能被截断。",
-    "输出格式：先写剧情正文（纯叙述，不要 JSON、不要代码块）；空一行后另起一行，输出元信息块：",
+    "· 输出顺序固定：先 META，再正文。先想清楚数值和选项再动笔，比写到最后再补更可靠。",
+    "输出格式（严格按这个顺序，不要颠倒）：",
+    "第一步：回复的最前面就是元信息块（它很短，一定写得完）：",
     "<<<META",
-    "{\"choices\":[{\"t\":\"选项正文，写到动作和对象\",\"k\":\"推进|代价|关系|观察|逃离|交涉|情欲\",\"d\":\"会导向什么，15字内\"}]," +
-      "\"delta\":{\"" + w.pack.stats[0].key + "\":0}," +
-      "\"quest\":{\"goal\":\"这一轮最要紧的目标，动宾短语，14字内\",\"need\":\"还差什么才能达成，12字内\"," +
-      "\"risk\":\"谁或什么在逼近，14字内\",\"clock\":\"局势推进到哪一步，写具体，16字内\"," +
-      "\"inner\":\"你此刻真正想要的东西，和表面目标不同，30字内\"}," +
-      "\"wants\":[{\"who\":\"在场角色名\",\"want\":\"他自己的私心，16字内\"}]," +
-      "\"cast\":[{\"name\":\"人物名\",\"attitude\":\"敌对|中立|友善\",\"mood\":\"情绪，6字内\"," +
-      "\"state\":\"此刻的动作与姿态，20字内\",\"parts\":[{\"p\":\"部位\",\"s\":\"该部位的状态，10字内\"}]," +
-      "\"sex\":\"性部位与生理状态，30字内，没有就留空\"}]}",
+    metaSchema(w),
     "META>>>",
+    "第二步：另起一行，写这一轮的剧情正文。纯叙述，不要 JSON、不要代码块、不要复述 META 里的内容。正文写多长都可以，不会因为长度被截掉。",
     "· quest 与 cast 每轮都要给，不能省略。cast 只列本轮真正出场的角色，最多 4 个；没出场的人不要写进来。",
     "· quest.clock 写具体进度，例如「石延枫已下到第五层」。不要写「时间紧迫」「情况危急」。",
     "· quest.inner 写人心：你真正怕的、馋的、舍不得的东西，可以和你嘴上说的目标相反。不要复述 goal。",
@@ -1641,6 +1658,119 @@ function buildSystem(w) {
     "· sex 只在该角色此刻正卷入情欲场面时填写，1 到 2 句，写出生理实况（湿润、充血、肿胀、收缩、发软、酸痛、体液残留、衣物的状态），用具体词，不要用「那种感觉」「异样的刺激」这类回避说法，也不要写心理挣扎。角色不在情境中就填空字符串。",
     "· 尺度为「全年龄」或「暗涌」时，sex 一律留空。"
   ].filter(Boolean).join("\n");
+}
+
+/* META 的 JSON 模板：主提示词与「补发 META」共用 */
+function metaSchema(w) {
+  var k0 = (w.pack.stats[0] && w.pack.stats[0].key) || "hp";
+  return [
+    "{",
+    "\"choices\":[{\"t\":\"选项正文，写到动作和对象\",\"k\":\"推进|代价|关系|观察|逃离|交涉|情欲\",\"d\":\"会导向什么，15字内\"}],",
+    "\"delta\":{\"" + k0 + "\":0},",
+    "\"quest\":{\"goal\":\"这一轮最要紧的目标，动宾短语，14字内\",\"need\":\"还差什么才能达成，12字内\",",
+    "\"risk\":\"谁或什么在逼近，14字内\",\"clock\":\"局势推进到哪一步，写具体，16字内\",",
+    "\"inner\":\"你此刻真正想要的东西，和表面目标不同，30字内\"},",
+    "\"wants\":[{\"who\":\"在场角色名\",\"want\":\"他自己的私心，16字内\"}],",
+    "\"cast\":[{\"name\":\"人物名\",\"attitude\":\"敌对|中立|友善\",\"mood\":\"情绪，6字内\",",
+    "\"state\":\"此刻的动作与姿态，20字内\",\"parts\":[{\"p\":\"部位\",\"s\":\"该部位的状态，10字内\"}],",
+    "\"sex\":\"性部位与生理状态，30字内，没有就留空\"}]",
+    "}"
+  ].join("");
+}
+
+function mergeUsage(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return {
+    prompt_tokens: (a.prompt_tokens || 0) + (b.prompt_tokens || 0),
+    completion_tokens: (a.completion_tokens || 0) + (b.completion_tokens || 0),
+    total_tokens: (a.total_tokens || 0) + (b.total_tokens || 0)
+  };
+}
+
+/* 正文已经拿到，但没解析出 META：补发一次「只输出 META」的小请求，不重写正文 */
+function ensureMeta(w, raw, t) {
+  t = t || parseTurn(raw);
+  if (t.hasMeta) return Promise.resolve(t);
+  var narr = String(t.narration || raw || "").trim();
+  if (narr.length < 40) return Promise.resolve(t);
+
+  var msgs = [
+    {
+      role: "system",
+      content: "你是一个只输出元信息块的组件。只输出一个 META 块，不要写正文、不要解释、不要代码块围栏。格式：\n<<<META\n" +
+        metaSchema(w) + "\nMETA>>>"
+    },
+    {
+      role: "user",
+      content: "这一轮的正文如下。请据它生成 META：选项必须从正文里的人、物、动作长出来，写清对谁做什么。\n\n" +
+        narr.slice(-2200)
+    }
+  ];
+  var first = llmLastUsage;
+  return llm(msgs, { temp: 0.2, timeout: 90000, maxTok: 900, noStream: true })
+    .then(function (r2) {
+      llmLastUsage = mergeUsage(first, llmLastUsage);
+      var t2 = parseTurn(r2);
+      if (t2 && t2.hasMeta) {
+        t2.narration = narr;
+        t2.recovered = true;
+        return t2;
+      }
+      t.narration = narr;
+      return t;
+    })
+    .catch(function () {
+      llmLastUsage = first;
+      t.narration = narr;
+      return t;
+    });
+}
+
+/* 模型彻底没给选项时的兜底：从任务目标和在场人物里长出来，不用空话 */
+function fallbackChoices(w) {
+  var out = [];
+  var lc = null;
+  try { lc = lastCastOf(w); } catch (e) { lc = null; }
+  var q = (lc && lc.quest) || (w.pack && w.pack.quest) || null;
+  var cast = (lc && lc.cast) || [];
+  if (!cast.length && w.pack && w.pack.characters) {
+    cast = w.pack.characters.filter(function (c) { return c.active !== false; }).slice(0, 3)
+      .map(function (c) { return { name: c.name, attitude: /敌|仇|对立/.test(c.relation || "") ? "敌对" : "中立" }; });
+  }
+  var foe = null, ally = null;
+  cast.forEach(function (c) {
+    if (!foe && /敌/.test(c.attitude || "")) foe = c;
+    if (!ally && /友/.test(c.attitude || "")) ally = c;
+  });
+  if (q && q.goal) out.push({ t: "先把「" + cut(q.goal, 14) + "」办到底", k: "推进", d: "照原计划走一步" });
+  if (foe) out.push({ t: "先稳住" + cut(foe.name, 6) + "，看他想要什么", k: "交涉", d: "会暴露你的位置" });
+  if (ally) out.push({ t: "低声问" + cut(ally.name, 6) + "一句", k: "关系", d: "她会说出更多" });
+  var generic = [
+    { t: "退到暗处，先看清这一圈有什么", k: "观察", d: "时间会往前走" },
+    { t: "往回退半步，找一条退路", k: "逃离", d: "会错过眼前的机会" },
+    { t: "开口，把话头先递出去", k: "交涉", d: "对方会先亮底" }
+  ];
+  for (var gi = 0; out.length < 3 && gi < generic.length; gi++) out.push(generic[gi]);
+  return out.slice(0, 3);
+}
+
+/* 没 META 时的提示条：带一个「重算这一轮」按钮，不静默降级 */
+function warnNoMeta(w) {
+  var box = document.createElement("div");
+  box.className = "msg warnmeta";
+  var p = document.createElement("span");
+  p.className = "wt";
+  p.textContent = "这一轮模型漏了状态块，选项是按当前局面推的。";
+  box.appendChild(p);
+  var b = document.createElement("button");
+  b.className = "wbtn";
+  b.type = "button";
+  b.textContent = "重算这一轮";
+  b.onclick = function () { redrawRound(); };
+  box.appendChild(b);
+  $("p-log").appendChild(box);
+  scrollLog(false);
 }
 
 function buildHistory(w) {
@@ -1916,10 +2046,33 @@ function submit(text) {
     .concat(hist)
     .concat([{ role: "user", content: "【玩家行动】" + text + "\n请续写并给出三个选项。" }]);
 
-  var lastPaint = 0;
+  var lastPaint = 0, prep = null;
+  function showPrep(on) {
+    if (on) {
+      if (prep) return;
+      prep = document.createElement("div");
+      prep.className = "prep";
+      prep.textContent = "结算状态…";
+      live.appendChild(prep);
+      scrollLog(true);
+    } else if (prep) {
+      prep.remove();
+      prep = null;
+    }
+  }
   function onDelta(all) {
-    var cut = all.indexOf("<<<META");
-    var bodyText = cut >= 0 ? all.slice(0, cut) : all;
+    var s0 = String(all || "");
+    var bodyText;
+    if (/^\s*<<<META/i.test(s0)) {
+      var end = s0.indexOf("META>>>");
+      if (end < 0) { showPrep(true); return; }   // META 还没写完，先别渲染
+      showPrep(false);
+      bodyText = s0.slice(end + 7);
+    } else {
+      showPrep(false);
+      var cut = s0.indexOf("<<<META");
+      bodyText = cut >= 0 ? s0.slice(0, cut) : s0;
+    }
     var now = Date.now();
     if (now - lastPaint < 70) return;   // 节流，别每字重排
     lastPaint = now;
@@ -1928,7 +2081,7 @@ function submit(text) {
 
   llm(msgs, { temp: cfg.temp || 0.9, timeout: 180000, onDelta: onDelta })
     .then(function (raw) {
-      var t = parseTurn(raw);
+      return ensureMeta(w, raw, parseTurn(raw)).then(function (t) {
       var narr = t.narration || "（模型没有返回正文）";
       var used = recordUsage(w, sysText, hist, raw);
 
@@ -1950,9 +2103,7 @@ function submit(text) {
 
       w.log.push({ role: "narr", text: narr });
 
-      if (raw.indexOf("<<<META") < 0 && raw.length > 400) {
-        appendMsg("delta", "⚠ 这一轮没收到 META 块（多半被 max_tokens 截断了），选项与数值未结算。去 ⚙ 把「最大输出 tokens」调大。");
-      }
+      if (!t.hasMeta) warnNoMeta(w);
 
       var bits = Object.keys(delta).map(function (k) {
         return k + (delta[k] > 0 ? "+" : "") + delta[k];
@@ -1977,13 +2128,14 @@ function submit(text) {
         appendMsg("usage", uline);
       }
 
-      w.choices = t.choices.length ? t.choices : ["继续", "观察四周", "退后一步"];
+      w.choices = t.choices.length ? t.choices : fallbackChoices(w);
       w.turns++;
       w.updated = Date.now();
       renderStats();
       renderChoices();
       saveWorks();
       compactMemory(w);
+      });
     })
     .catch(function (err) {
       live.className = "msg err";
