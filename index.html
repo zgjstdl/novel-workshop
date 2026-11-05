@@ -88,6 +88,11 @@
   .castpanel .quest .lab{font-size:10px;letter-spacing:.16em;color:#6d6152}
   .castpanel .quest b{font-size:13.5px;font-weight:500;color:#e8cf9d;letter-spacing:.03em}
   .castpanel .quest .risk{color:#d0755e}
+  .castpanel .quest .clock{color:#c9a227}
+  .castpanel .inner{margin-top:6px;padding-left:2px;font-size:11.5px;line-height:1.7;color:#a2918f;font-style:italic}
+  .castpanel .inner .lab{font-style:normal;font-size:10px;letter-spacing:.16em;color:#6d6152;margin-right:7px}
+  .castpanel .c .want{margin-top:5px;font-size:10.5px;line-height:1.6;color:#b99b52}
+  .castpanel .c .want i{font-style:normal;color:#7d6f56;margin-right:5px;letter-spacing:.08em}
   .castpanel .who{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
   .castpanel .c{padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.028);
     border:1px solid rgba(255,255,255,.07);min-width:0}
@@ -124,8 +129,13 @@
   @keyframes blink{0%,60%,100%{opacity:.25}30%{opacity:1}}
 
   .choices{display:flex;flex-direction:column;gap:8px;margin:2px 0 10px}
-  .choice{text-align:left;font-family:inherit;font-size:15px;line-height:1.6;cursor:pointer;
-    background:rgba(201,162,39,.05);border:1px solid rgba(201,162,39,.26);color:#e2d5bd;border-radius:10px;padding:11px 15px;transition:.16s}
+  .choice{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;font-family:inherit;font-size:15px;line-height:1.6;cursor:pointer;
+    background:rgba(201,162,39,.05);border:1px solid rgba(201,162,39,.26);color:#e2d5bd;border-radius:10px;padding:10px 15px;transition:.16s}
+  .choice .ct{display:block}
+  .choice .cm{display:flex;align-items:center;gap:7px;font-size:11px;line-height:1.5;color:#7d7263}
+  .choice .cm .k{font-style:normal;letter-spacing:.08em;padding:1px 6px;border-radius:4px;
+    background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.22);color:#b99b52}
+  .choice:hover .cm{color:#94887a}
   .choice:hover{background:rgba(201,162,39,.14);border-color:rgba(201,162,39,.6);transform:translateX(3px)}
   .choice[disabled]{opacity:.45;cursor:default;transform:none}
 
@@ -153,7 +163,7 @@
     overscroll-behavior:contain;padding:2px 2px 10px;scroll-behavior:smooth}
   #p-log::-webkit-scrollbar{width:5px}
   #p-log::-webkit-scrollbar-thumb{background:rgba(201,162,39,.22);border-radius:3px}
-  #p-choices{flex:0 0 auto;min-width:0}
+  #p-choices{flex:0 1 auto;min-width:0;max-height:46vh;overflow-y:auto;overscroll-behavior:contain}
   #p-choices:empty{display:none}
   #play .composer{position:static;flex:0 0 auto;padding:8px 0 2px;background:none;min-width:0}
   #play .footnote{padding:2px 0 0}
@@ -681,6 +691,23 @@ function llm(messages, opt) {
   });
 }
 
+/* 选项规范化：字符串和对象两种写法都收 */
+function normChoice(x) {
+  if (x == null) return null;
+  if (typeof x === "string") {
+    var t0 = x.trim();
+    return t0 ? { t: t0, k: "", d: "" } : null;
+  }
+  if (typeof x !== "object") return { t: String(x), k: "", d: "" };
+  var t = String(x.t || x.text || x.label || x.title || "").trim();
+  if (!t) return null;
+  return {
+    t: t.slice(0, 120),
+    k: String(x.k || x.type || x.tag || "").slice(0, 6),
+    d: String(x.d || x.hint || x.dir || x.why || "").slice(0, 44)
+  };
+}
+
 /* 一轮回复的解析：新协议（正文 + META 块）优先，旧协议（纯 JSON）兼容 */
 function parseTurn(raw) {
   var s = String(raw || "");
@@ -692,7 +719,7 @@ function parseTurn(raw) {
     try { obj = parseJSON(tail); } catch (e) { obj = null; }
     return {
       narration: text,
-      choices: obj && Array.isArray(obj.choices) ? obj.choices.slice(0, 3).map(String) : [],
+      choices: obj && Array.isArray(obj.choices) ? obj.choices.slice(0, 5).map(normChoice).filter(Boolean) : [],
       delta: obj && obj.delta && typeof obj.delta === "object" ? obj.delta : {},
       quest: obj && obj.quest && typeof obj.quest === "object" ? obj.quest : null,
       cast: obj && Array.isArray(obj.cast) ? obj.cast.slice(0, 4) : []
@@ -703,7 +730,7 @@ function parseTurn(raw) {
   if (d && (d.narration || d.choices)) {
     return {
       narration: String(d.narration || "").trim(),
-      choices: Array.isArray(d.choices) ? d.choices.slice(0, 3).map(String) : [],
+      choices: Array.isArray(d.choices) ? d.choices.slice(0, 5).map(normChoice).filter(Boolean) : [],
       delta: d.delta && typeof d.delta === "object" ? d.delta : {}
     };
   }
@@ -1340,12 +1367,27 @@ function renderChoices() {
   var w = current(); if (!w) return;
   var box = $("p-choices");
   box.innerHTML = "";
-  (w.choices || []).slice(0, 3).forEach(function (t) {
+  (w.choices || []).map(normChoice).filter(Boolean).slice(0, 5).forEach(function (c) {
     var b = document.createElement("button");
     b.className = "choice";
-    b.textContent = t;
+    var t = document.createElement("span");
+    t.className = "ct";
+    t.textContent = c.t;
+    b.appendChild(t);
+    if (c.k || c.d) {
+      var m = document.createElement("span");
+      m.className = "cm";
+      if (c.k) {
+        var kk = document.createElement("i");
+        kk.className = "k";
+        kk.textContent = c.k;
+        m.appendChild(kk);
+      }
+      if (c.d) m.appendChild(document.createTextNode(c.d));
+      b.appendChild(m);
+    }
     b.disabled = busy;
-    b.onclick = function () { submit(t); };
+    b.onclick = function () { submit(c.t); };
     box.appendChild(b);
   });
 }
@@ -1568,17 +1610,27 @@ function buildSystem(w) {
     "· 篇幅不够时，用动作、对白、环境来填充，禁止用解释和总结凑字数。",
     ratingBlock(p),
     "· 若玩家的动作导致状态变化，给出 delta；没有变化就给空对象。单项单轮涨幅不超过该属性上限的 20%，境界一次只升一级；受伤可以掉得更多。",
-    "· 三个选项要彼此不同路：一个推进、一个试探、一个反向或撤退。",
+    "· 每轮给 3 到 5 个选项，必须覆盖三种走向：一个「推进」（直接把局面往下推）、一个「代价」（做了要付代价、冒险或激怒某人）、一个「关系」（针对在场某个人的情感、试探或索取）。可以再加「观察」或「逃离」，但不要为了凑数硬编。",
+    "· 选项必须从这一轮正文里的具体人、物、动作里长出来，写清对谁做什么。例：「按住她的手腕，把袖子往上推一截」。禁止写「继续」「观察四周」「开口说话」这类放在任何场景都成立的空话。",
+    "· 选项之间的后果必须真的不同：不同的对象、不同的风险、不同的收益。不要给三个同一方向的变体。",
     "· 正文写多长都可以，但 <<<META 块必须出现在全部正文之后，不能被截断。",
     "输出格式：先写剧情正文（纯叙述，不要 JSON、不要代码块）；空一行后另起一行，输出元信息块：",
     "<<<META",
-    "{\"choices\":[\"选项一\",\"选项二\",\"选项三\"],\"delta\":{\"" + w.pack.stats[0].key + "\":0}," +
-      "\"quest\":{\"goal\":\"当前目标，12字内\",\"need\":\"还差什么，12字内\",\"risk\":\"最紧迫的威胁，14字内\"}," +
+    "{\"choices\":[{\"t\":\"选项正文，写到动作和对象\",\"k\":\"推进|代价|关系|观察|逃离|交涉|情欲\",\"d\":\"会导向什么，15字内\"}]," +
+      "\"delta\":{\"" + w.pack.stats[0].key + "\":0}," +
+      "\"quest\":{\"goal\":\"这一轮最要紧的目标，动宾短语，14字内\",\"need\":\"还差什么才能达成，12字内\"," +
+      "\"risk\":\"谁或什么在逼近，14字内\",\"clock\":\"局势推进到哪一步，写具体，16字内\"," +
+      "\"inner\":\"你此刻真正想要的东西，和表面目标不同，30字内\"}," +
+      "\"wants\":[{\"who\":\"在场角色名\",\"want\":\"他自己的私心，16字内\"}]," +
       "\"cast\":[{\"name\":\"人物名\",\"attitude\":\"敌对|中立|友善\",\"mood\":\"情绪，6字内\"," +
       "\"state\":\"此刻的动作与姿态，20字内\",\"parts\":[{\"p\":\"部位\",\"s\":\"该部位的状态，10字内\"}]," +
       "\"sex\":\"性部位与生理状态，30字内，没有就留空\"}]}",
     "META>>>",
     "· quest 与 cast 每轮都要给，不能省略。cast 只列本轮真正出场的角色，最多 4 个；没出场的人不要写进来。",
+    "· quest.clock 写具体进度，例如「石延枫已下到第五层」。不要写「时间紧迫」「情况危急」。",
+    "· quest.inner 写人心：你真正怕的、馋的、舍不得的东西，可以和你嘴上说的目标相反。不要复述 goal。",
+    "· quest.wants 只写在场的角色，最多 3 个，每人一句私心（想守住什么、想从你这里得到什么、怕失去什么）。没什么可写就省略这个字段。",
+    "· 选项的 d 写具体后果，例如「她会以为你在轻薄她」。不要写「可能引起误会」这种概括。",
     "· attitude 只能填「敌对」「中立」「友善」三者之一；state 写肉眼可见的东西（伤口、姿势、手上的动作），不要写心理活动。",
     "· parts 只列本轮真正发生变化的部位，最多 4 个。p 用具体部位名（咽喉、肩、腕、指节、腰、腿、背、腹、膝、脚踝），s 写可见痕迹或直接触感（红肿、渗血、发抖、绷紧、发烫、湿冷、青紫），不要写「很难受」「有些累」这类笼统感受。没有变化就给空数组。",
     "· sex 只在该角色此刻正卷入情欲场面时填写，1 到 2 句，写出生理实况（湿润、充血、肿胀、收缩、发软、酸痛、体液残留、衣物的状态），用具体词，不要用「那种感觉」「异样的刺激」这类回避说法，也不要写心理挣扎。角色不在情境中就填空字符串。",
@@ -1612,7 +1664,7 @@ function castNode(quest, cast, stale) {
 
   var body = mk("div", "cbody");
 
-  if (quest && (quest.goal || quest.need || quest.risk)) {
+  if (quest && (quest.goal || quest.need || quest.risk || quest.clock)) {
     var q = mk("div", "quest");
     if (quest.goal) {
       q.appendChild(mk("span", "lab", "任务"));
@@ -1626,7 +1678,28 @@ function castNode(quest, cast, stale) {
       q.appendChild(mk("span", "lab", "威胁"));
       q.appendChild(mk("span", "risk", quest.risk));
     }
+    if (quest.clock) {
+      q.appendChild(mk("span", "lab", "时限"));
+      q.appendChild(mk("span", "clock", quest.clock));
+    }
     body.appendChild(q);
+  }
+
+  if (quest && quest.inner) {
+    var inl = mk("div", "inner");
+    inl.appendChild(mk("span", "lab", "心念"));
+    inl.appendChild(document.createTextNode(String(quest.inner)));
+    body.appendChild(inl);
+  }
+
+  var wantMap = {};
+  if (quest && Array.isArray(quest.wants)) {
+    quest.wants.slice(0, 4).forEach(function (x) {
+      if (!x || typeof x !== "object") return;
+      var who = String(x.who || x.name || "").trim();
+      var want = String(x.want || x.need || "").trim();
+      if (who && want) wantMap[who] = want.slice(0, 40);
+    });
   }
 
   var list = (cast || []).filter(function (c) { return c && c.name; }).slice(0, 4);
@@ -1641,6 +1714,13 @@ function castNode(quest, cast, stale) {
       head.appendChild(mk("span", "at", at + (c.mood ? " · " + c.mood : "")));
       cell.appendChild(head);
       if (c.state) cell.appendChild(mk("div", "st", c.state));
+
+      if (wantMap[String(c.name || "").trim()]) {
+        var wrow = mk("div", "want");
+        wrow.appendChild(mk("i", null, "想要"));
+        wrow.appendChild(document.createTextNode(wantMap[String(c.name || "").trim()]));
+        cell.appendChild(wrow);
+      }
 
       var parts = Array.isArray(c.parts) ? c.parts.filter(function (x) { return x && x.p; }).slice(0, 4) : [];
       if (parts.length) {
