@@ -102,6 +102,7 @@
   .castpanel .c .pt i{font-style:normal;color:#c9b48c;letter-spacing:.04em}
   .castpanel .c .sexlin{margin-top:6px;padding:5px 8px;border-radius:5px;font-size:10.5px;line-height:1.65;
     color:#c99a9a;background:rgba(176,84,96,.09);border-left:2px solid rgba(200,110,120,.45)}
+  .castpanel[data-stale]{opacity:.84}
   .castpanel .c.hostile{border-color:rgba(224,86,47,.32);background:rgba(179,64,47,.07)}
   .castpanel .c.hostile .at{color:#e0562f}
   .castpanel .c.friend{border-color:rgba(201,162,39,.3);background:rgba(201,162,39,.06)}
@@ -1289,7 +1290,7 @@ function renderLog() {
     if (e.role === "cast") {
       var cd = null;
       try { cd = JSON.parse(e.text); } catch (err) { cd = null; }
-      if (cd) { box.appendChild(castNode(cd.quest, cd.cast)); continue; }
+      if (cd) { box.appendChild(castNode(cd.quest, cd.cast, cd.stale)); continue; }
     }
     box.appendChild(makeMsg(e.role, e.text));
   }
@@ -1580,9 +1581,10 @@ function buildHistory(w) {
 
 
 /* ================= 每轮状态栏：任务 + 出场人物 ================= */
-function castNode(quest, cast) {
+function castNode(quest, cast, stale) {
   var wrap = document.createElement("div");
   wrap.className = "castpanel";
+  if (stale) wrap.setAttribute("data-stale", "1");
 
   function mk(tag, cls, txt) {
     var el = document.createElement(tag);
@@ -1642,11 +1644,49 @@ function castNode(quest, cast) {
   return wrap;
 }
 
-function appendCast(quest, cast) {
-  var node = castNode(quest, cast);
+function appendCast(quest, cast, stale) {
+  var node = castNode(quest, cast, stale);
   if (!node.childNodes.length) return;
   $("p-log").appendChild(node);
   scrollLog(true);
+}
+
+/* 上一轮的状态块（模型偶尔漏给时用来续上，保证每轮都有状态） */
+function lastCastOf(w) {
+  for (var i = w.log.length - 1; i >= 0; i--) {
+    var m = w.log[i];
+    if (m.role === "cast") {
+      try {
+        var d = JSON.parse(m.text);
+        if (d && Array.isArray(d.cast) && d.cast.length) return d;
+      } catch (e) {}
+    }
+  }
+  return null;
+}
+
+/* 保证每轮都产出一个状态块：模型给了就用，没给就沿用上一轮，再没有就用人物卡兜底 */
+function fillCast(w, quest, cast) {
+  var q = quest && (quest.goal || quest.need || quest.risk) ? quest : null;
+  var list = Array.isArray(cast)
+    ? cast.filter(function (c) { return c && c.name; }).slice(0, 4)
+    : [];
+  if (list.length) return { quest: q || (lastCastOf(w) || {}).quest || null, cast: list };
+
+  var prev = lastCastOf(w);
+  if (prev) return { quest: q || prev.quest || null, cast: prev.cast, stale: true };
+
+  var p = w.pack || {};
+  var arr = (p.characters || []).filter(function (c) { return c.active; }).slice(0, 3).map(function (c) {
+    return {
+      name: c.name,
+      attitude: "中立",
+      mood: c.mood || "",
+      state: String(c.relation || c.look || "").slice(0, 20)
+    };
+  });
+  if (arr.length) return { quest: q, cast: arr, stale: true };
+  return q ? { quest: q, cast: [] } : null;
 }
 
 /* ================= 快照（回退 / 重掷） ================= */
@@ -1787,9 +1827,10 @@ function submit(text) {
         appendMsg("delta", line);
       }
 
-      if ((t.quest && (t.quest.goal || t.quest.risk)) || (t.cast && t.cast.length)) {
-        w.log.push({ role: "cast", text: JSON.stringify({ quest: t.quest, cast: t.cast }) });
-        appendCast(t.quest, t.cast);
+      var cb = fillCast(w, t.quest, t.cast);
+      if (cb) {
+        w.log.push({ role: "cast", text: JSON.stringify(cb) });
+        appendCast(cb.quest, cb.cast, cb.stale);
       }
 
       if (used && (used.pin || used.pout)) {
