@@ -149,6 +149,27 @@
   #p-send[disabled]{opacity:.4;cursor:default}
   .footnote{text-align:center;font-size:11px;color:#5e564c;letter-spacing:.08em;padding:5px 0 2px}
 
+  /* ===== 移动端 ===== */
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+  button,.choice,.card,.tab,.chip,.perk{touch-action:manipulation}
+  @media (hover:hover){
+    .choice:hover{background:rgba(201,162,39,.14);border-color:rgba(201,162,39,.6);transform:translateX(3px)}
+    .choice:hover .cm{color:#94887a}
+  }
+  @media (hover:none){
+    .choice:hover{background:rgba(201,162,39,.05);border-color:rgba(201,162,39,.26);transform:none}
+    .choice:hover .cm{color:#7d7263}
+    .choice:active{background:rgba(201,162,39,.18);border-color:rgba(201,162,39,.62)}
+    .card:active{background:rgba(201,162,39,.08)}
+  }
+  @media (max-width:768px){
+    textarea,input,select{font-size:16px}
+    .view{padding:16px 13px calc(14px + env(safe-area-inset-bottom))}
+    #play{padding-bottom:calc(6px + env(safe-area-inset-bottom))}
+    .acts{gap:8px}
+    .modal .sheet{max-height:92vh}
+  }
+
   /* ===== 游戏页：顶栏与输入框常驻，只有正文区滚动 ===== */
   html,body{overflow-x:hidden}
   #play{height:100vh;height:100dvh;min-height:0;overflow:hidden;padding-bottom:6px;max-width:100%}
@@ -3605,6 +3626,26 @@ try { purgeOldSeeds(); } catch (e) {}
 if (!localStorage.getItem("jw-seeded")) {
   try { seedWorks(true); localStorage.setItem("jw-seeded", "1"); } catch (e) {}
 }
+try {
+  (function () {
+    var vv = window.visualViewport;
+    if (!vv) return;
+    var fit = function () {
+      var pl = document.getElementById("play");
+      if (!pl || pl.offsetParent === null) return;
+      var h = vv.height;
+      if (h && Math.abs(h - window.innerHeight) > 120) {
+        pl.style.height = Math.round(h) + "px";
+        try { scrollLog(true); } catch (e) {}
+      } else {
+        pl.style.height = "";
+      }
+    };
+    vv.addEventListener("resize", fit);
+    vv.addEventListener("scroll", fit);
+  })();
+} catch (e) {}
+
 applyFont();
 
 $("btn-seed").onclick = function () { seedWorks(false); };
