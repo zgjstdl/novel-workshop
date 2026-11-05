@@ -386,7 +386,9 @@
       <label>题材</label>
       <select id="gen-genre">
         <option>奇幻</option><option>都市</option><option>科幻</option><option>武侠</option>
-        <option>悬疑</option><option>宫廷</option><option>末日</option>
+        <option>悬疑</option><option>宫廷</option><option>末日</option><option>修真</option>
+        <option>赛博</option><option>民国</option><option>蒸汽朋克</option><option>部落神话</option>
+        <option>海洋</option><option>校园</option><option>西部</option><option>怪谈</option>
       </select>
     </div>
     <div class="field">
@@ -401,9 +403,14 @@
       </select>
       <div class="hintline">生成后可以随时在作品菜单「尺度与写法」里细调。</div>
     </div>
+    <div class="actions2" style="margin-bottom:10px">
+      <button id="gen-dice">🎲 换一句灵感</button>
+      <button id="gen-rand" class="primary">⚡ 全随机，直接开写</button>
+    </div>
+    <div class="hintline" style="margin:-4px 0 12px">灵感和题材全部本地拼装，不消耗 token；不满意就一直按「换一句」。</div>
     <div class="actions2">
       <button id="gen-cancel">取消</button>
-      <button id="gen-go" class="primary">生成剧情卡</button>
+      <button id="gen-go" class="primary">用这句话生成剧情卡</button>
     </div>
   </div>
 </div>
@@ -920,7 +927,7 @@ function normalizePack(p, fallbackTitle) {
     place: p.place || "",
     stats: stats,
     opening: opening,
-    hooks: Array.isArray(p.hooks) ? p.hooks.filter(Boolean).slice(0, 6) : [],
+    hooks: Array.isArray(p.hooks) ? p.hooks.filter(Boolean).slice(0, 10) : [],
     rules: Array.isArray(p.rules) ? p.rules.filter(Boolean).slice(0, 6) : [],
     events: (Array.isArray(p.events) ? p.events : []).slice(0, 24).map(normEvent),
     director: {
@@ -939,7 +946,7 @@ function createWork(pack) {
     pack: pack,
     state: {},
     log: [],
-    choices: ["继续", "四处看看", "开口说话"],
+    choices: [],
     summary: "",
     turns: 0,
     created: Date.now(),
@@ -1288,6 +1295,7 @@ function openWork(id) {
   $("p-sub").textContent = w.pack.subtitle || "";
   renderStats();
   renderLog();
+  if (!w.choices || !w.choices.length) w.choices = fallbackChoices(w);
   renderChoices();
   updateMode();
   window.scrollTo({ top: 0 });
@@ -1741,8 +1749,13 @@ function fallbackChoices(w) {
   var foe = null, ally = null;
   cast.forEach(function (c) {
     if (!foe && /敌/.test(c.attitude || "")) foe = c;
-    if (!ally && /友/.test(c.attitude || "")) ally = c;
+    if (!ally && /友|亲|旧|熙昧|爱|同伴/.test(c.attitude || c.mood || "")) ally = c;
   });
+  if (!ally) {
+    for (var ai = 0; ai < cast.length; ai++) {
+      if (cast[ai] !== foe) { ally = cast[ai]; break; }
+    }
+  }
   if (q && q.goal) out.push({ t: "先把「" + cut(q.goal, 14) + "」办到底", k: "推进", d: "照原计划走一步" });
   if (foe) out.push({ t: "先稳住" + cut(foe.name, 6) + "，看他想要什么", k: "交涉", d: "会暴露你的位置" });
   if (ally) out.push({ t: "低声问" + cut(ally.name, 6) + "一句", k: "关系", d: "她会说出更多" });
@@ -2256,39 +2269,187 @@ function importGo(text) {
     });
 }
 
+/* ================= 从零生成 · 灵感库 ================= */
+var IDEA_LIB = {
+  who: [
+    "被逐出师门的女术士", "值夜班的殡仪馆化妆师", "退隐三年的杀手", "守着一座空灯塔的看护人",
+    "靠替人写情书过活的枪手", "卖假古董的鉴定师", "在深山里开了十年诊所的赤脚医生", "只剩半条命的老兵",
+    "把全部积蓄押在一场赌局上的调香师", "被家族除名的祭司", "专门拆穿骗局的法医", "跑长途的女货车司机",
+    "在雨里修了半辈子钟表的匠人", "刚被顶替了身份的探花", "靠一张嘴活下来的掮客", "把弟弟从刑场背回来的人",
+    "抄了三十年经的抄经人", "被聘去教一个怪孩子的家庭教师", "海上打捞队的潜水员", "只卖出过一张画的画家",
+    "在边境查走私的巡查使", "继承了凶宅的继承人", "替仇人养了十年孩子的人", "被镇上人称作疯子的报信人",
+    "专门收拾烂摊子的收尸人", "唱了二十年丧歌的女伶", "被自家猎犬带回来的猎人", "把整条街的账都记得分明的当铺学徒",
+    "在旧城改造里测绘危楼的工程师", "替人顶罪的兄长"
+  ],
+  turn: [
+    "在血月夜召唤出一个不肯说真名的欲魔", "收到一封署名自己、日期却在三年后的信",
+    "发现镜子里的人比自己慢半拍", "从死者身上摸出一枚自己小时候戴过的铜钱",
+    "被人用一把本该锈死的钥匙打开了从没上锁的房间", "在葬礼上听见死人开口点自己的名字",
+    "醒来时身边躺着一条不属于任何人的尾巴", "被一具尸体指认成凶手",
+    "接手了一桩三十年前就该结案的委托", "发现自己每天醒来都少记住一个人",
+    "被请去给一座会呼吸的宅子估价", "在雪地里救回一个没有影子的孩子",
+    "翻出一本写满了自己笔迹、却从没写过的日记", "被最信任的人从背后卖了第一次，也是最后一次",
+    "答应替一位将死之人守一句不能说的秘密", "在自己家的地基里挖出一口仍在跳动的棺材",
+    "被一只没有主人的手牵进了一场不属于人间的婚宴", "欠下一笔要用名字偿还的债",
+    "发现整座城的人都在同一个梦里见过自己", "捡到一个只在雨夜出现的孩子",
+    "接下了一份写明「不许问」的差事", "被昔日的同门用剑指着，要他还回一件早就丢了的东西",
+    "在地下拍卖行里看见了自己失窃的十年", "被人请去看守一扇不该被打开的门",
+    "在废弃的车站等来一班早就停运的列车", "成为唯一一个记得昨天发生了什么的人",
+    "替一个不肯露脸的人做担保", "在打捞上来的箱子里听见有人在里面敲",
+    "被自己写下的剧本一步一步照着发生", "发现身边所有人都在用同一个从没听过的名字称呼自己"
+  ],
+  place: [
+    "灰塔学院废弃的观星台", "常年落雨的旧城区", "一座被水淹了一半的城", "建在悬崖上的疗养院",
+    "只在夜里开市的旧货市场", "被查封十年的钟表厂", "一条通往边境的废弃铁路",
+    "沉在湖底的村庄", "被沙子埋到二层的图书馆", "山腹里的地下教堂",
+    "沿着海岸线慢慢烂掉的木栈道", "永不见光的深巷戏院", "被雪封住半年的哨所",
+    "靠一根缆绳连着两岸的孤岛", "开了三代人的酱园", "把整条街都包进去的当铺",
+    "打捞队常去的深水区", "无人认领的殡仪馆冷库", "一座只在雨夜出现的桥",
+    "被藤蔓吃掉的别墅", "山里最后一所小学", "停满废弃车厢的编组站",
+    "城墙根下的算命摊", "被改造成赌坊的老戏楼"
+  ],
+  goal: [
+    "想找回自己被抹掉的那段记忆", "想把弟弟从这条路上拽回来", "想在死之前见一个人最后一面",
+    "想弄明白自己到底是谁", "想把这笔债还清，然后走", "想让死人有名字",
+    "想守住这间铺子", "想把那件东西还回去", "想知道当年是谁动的手",
+    "想让自己被人记住一次", "想活着走出这座城", "想替一个人把话说完",
+    "想从这场交易里全身而退", "想弄清那个孩子到底是不是人", "想把名字要回来",
+    "想再见那盏灯亮一次", "想让所有欠账都结清", "想在雪化之前把人找到",
+    "想让那个人承认见过自己", "想把这场梦做完"
+  ],
+  block: [
+    "每往前走一步，都要拿记忆做抵押", "能帮你的人，正是当年动手的人",
+    "真相说出口就会死人", "你身上带着的东西，比你的命更值钱",
+    "记得这件事的人，只剩下你一个", "一旦被发现，你连尸体都不会剩",
+    "你要找的人一直在你身边，只是换了张脸", "这条路只能用别人的名字走",
+    "你每问一次，就有一个人被抹掉", "救人和自保只能选一个",
+    "这扇门开一次，就再也关不上", "替你说话的人，都没活过第二天",
+    "你已经不记得自己为什么开始", "对方要的不是你的命，是你的同意",
+    "有人在替你伪造记忆", "你欠的那笔债，利息是别人的命",
+    "越接近真相，身上越不像人", "所有线索都指向你自己",
+    "你不能说，也不能忘", "答应过的每一句，都会应验"
+  ],
+  tone: [
+    "冷冽的黑色幽默", "潮湿的、黏在皮肤上的不安", "克制的克制不住的深情",
+    "像旧胶片一样的颗粒感", "安静的、缓慢的恐怖", "刀锋一样干脆的残酷",
+    "带着体温的烟火气", "神话般的宿命感", "带着铁锈味的浪漫",
+    "像雨夜电台一样絮叨的亲密", "干净利落的白描", "慢火煨着的暖意",
+    "夸张的、近乎荒诞的热闹", "冷静到近乎无情的观察", "雾一样的暧昧",
+    "咬紧牙关的隐忍"
+  ]
+};
+
+var GENRE_POOL = ["奇幻", "都市", "科幻", "武侠", "悬疑", "宫廷", "末日", "修真",
+                  "赛博", "民国", "蒸汽朋克", "部落神话", "海洋", "校园", "西部", "怪谈"];
+
+var IDEA_TEMPLATES = [
+  "{who}，{turn}。舞台是{place}——{goal}，但{block}。",
+  "{place}——{who}{turn}。{goal}，而{block}。",
+  "{who}{turn}。{goal}，代价是{block}。这一切都发生在{place}。",
+  "{who}。{turn}。{goal}；问题是，{block}。而这都在{place}。",
+  "在{place}，{who}的麻烦是：{turn}。{goal}，偏偏{block}。"
+];
+
+function pickOne(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+var lastIdeas = [];
+function rollIdea() {
+  for (var tries = 0; tries < 12; tries++) {
+    var tpl = pickOne(IDEA_TEMPLATES);
+    var s2 = tpl
+      .replace("{who}", pickOne(IDEA_LIB.who))
+      .replace("{turn}", pickOne(IDEA_LIB.turn))
+      .replace("{place}", pickOne(IDEA_LIB.place))
+      .replace("{goal}", pickOne(IDEA_LIB.goal))
+      .replace("{block}", pickOne(IDEA_LIB.block));
+    if (lastIdeas.indexOf(s2) < 0) {
+      lastIdeas.push(s2);
+      if (lastIdeas.length > 8) lastIdeas.shift();
+      return s2;
+    }
+  }
+  return s2;
+}
+
+function rollRating() {
+  var pool = ["extreme", "graphic", "graphic", "explicit", "explicit", "sensual", "tension"];
+  return pickOne(pool);
+}
+
+var pendingTone = "";
+function fillRandomIdea() {
+  $("gen-idea").value = rollIdea();
+  var g = pickOne(GENRE_POOL);
+  var sel = $("gen-genre");
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === g) { sel.selectedIndex = i; break; }
+  }
+  var r = rollRating();
+  $("gen-rating").value = r;
+  pendingTone = pickOne(IDEA_LIB.tone);
+  return { genre: g, rating: r, tone: pendingTone };
+}
+
 /* ================= 从零生成 ================= */
 function genGo() {
   var idea = $("gen-idea").value.trim();
-  if (!idea) { toast("先写一句设定"); return; }
+  if (!idea) { toast("先写一句设定，或者按「换一句灵感」"); return; }
   var genre = $("gen-genre").value;
   var rating = $("gen-rating").value;
-  closeModal("m-gen");
-  openWorkLoading("正在搭建世界…");
+  var tone = pendingTone;
+  pendingTone = "";
+
+  $("gen-go").disabled = true;
+  openWorkLoading("正在搭建世界…这轮要写二十来张卡，请等十几秒");
 
   var sys = [
-    "你是互动小说设定师。根据用户的一句话设定，产出一张原创剧情卡。",
-    "尺度：" + ratingLabel(rating) + " —— " + (RATING_TEXT[rating] || "").replace(/^· /, ""),
+    "你是互动小说设定师。根据用户的一句话设定，产出一张能立刻开演的原创剧情卡。",
     "题材：" + genre,
-    "人物卡 3-6 张；设定卡 3-6 张。",
-    "只输出 JSON，不要代码块，字段：",
-    '{"title":"作品名","subtitle":"副标题","genre":"' + genre + '","premise":"两句主线","world":"世界观150字","style":"文风一句话","rating":"' + rating + '","npc":"主要互动角色","pronoun":"他/她","place":"开场地点","stats":[{"key":"heat","label":"中文","start":20},{"key":"bond","label":"中文","start":0},{"key":"will","label":"中文","start":40}],"opening":["第二人称开场段落1","2","3","4"],"hooks":["冲突1","2","3","4"],"rules":["规则1","2","3"],"characters":[{"name":"角色名","role":"身份","relation":"与主角的关系","look":"外貌","persona":"性格","voice":"口吻与口癖","want":"想要什么","secret":"秘密"}],"settings":[{"name":"名称","type":"地点/势力/规则/物品","keys":"触发词,逗号分隔","detail":"细节"}]}'
+    "尺度：" + ratingLabel(rating) + " —— " + (RATING_TEXT[rating] || "").replace(/^· /, ""),
+    "这是原创作品：人物、地名、势力全部现造，不要借用现实中的真实人物或已有作品的名号。",
+    "硬性要求：",
+    "1. 人物 6-8 个。至少一个对主角有明确敌意，一个与主角有暧昧或情感张力，一个藏着身份，一个只露面一次但让人记得住。每人的 voice 要写出具体口癖（爱说什么、怎么称呼主角、句尾习惯）。want 写具体欲望，不要写「想变强」这种空话；secret 写会被戳破的东西。",
+    "2. 设定 8-12 条，地点、势力、规则、物品四类都要有。keys 写 3-6 个会自然出现在正文里的触发词（地名、人名、物件名），别写抽象词。",
+    "3. hooks 给 8 条能反复用的冲突；rules 给 6 条这个世界不能违反的硬规则（违反就会付出代价）。",
+    "4. stats 给 5 项，key 用英文小写单词，label 用中文，start 在 0-60 之间，max 一律 100。这五项要贴合这个世界独有的东西，不要照搬通用的血量攻击。",
+    "5. opening 写 5 段第二人称开场，合计 300 字以上。从具体动作或一句对白切入，不要交代身世、不要写「你感到」。",
+    "6. events 给 8 条随机事件，每条 {title, cond, text}：title 六字内，cond 写触发前提，text 写具体发生什么（40 字内）。",
+    "只输出 JSON，不要代码块，不要解释。字段：",
+    '{"title":"作品名（四到八字）","subtitle":"副标题（一句钩子）","genre":"' + genre + '",' +
+    '"premise":"主线，两句","world":"世界观，180 字，写清力量来源、社会结构、禁忌",' +
+    '"style":"文风一句话","rating":"' + rating + '","npc":"主要互动角色名","pronoun":"他/她",' +
+    '"place":"开场地点","stats":[{"key":"a","label":"中文","start":20,"max":100}],' +
+    '"opening":["段落1","段落2","段落3","段落4","段落5"],"hooks":["1","2","3","4","5","6","7","8"],' +
+    '"rules":["1","2","3","4","5","6"],' +
+    '"characters":[{"name":"","role":"身份","relation":"与主角的关系","look":"外貌，30 字",' +
+    '"persona":"性格","voice":"口吻与口癖","want":"具体欲望","secret":"秘密","heat":3,"mood":""}],' +
+    '"settings":[{"name":"","type":"地点|势力|规则|物品","keys":"词1,词2,词3","detail":"细节，40 字"}],' +
+    '"events":[{"title":"六字内","cond":"触发前提","text":"发生什么，40 字"}]}'
   ].join("\n");
 
   llm([
     { role: "system", content: sys },
-    { role: "user", content: "设定：" + idea }
-  ], { temp: 0.95, timeout: 120000 })
+    { role: "user", content: "设定：" + idea + (tone ? "\n想要的基调：" + tone : "") }
+  ], { temp: 1.0, timeout: 180000, maxTok: 6000 })
     .then(function (raw) {
       var pack = normalizePack(parseJSON(raw), "未命名作品");
+      if (!pack.characters.length) throw new Error("模型没给出人物卡，再点一次试试");
       closeLoading();
+      closeModal("m-gen");
       var w = createWork(pack);
       renderShelf();
       openWork(w.id);
-      toast("世界已生成");
+      toast("世界已生成：" + pack.title + " · " + pack.characters.length + " 人");
     })
     .catch(function (e) {
       closeLoading();
+      openModal("m-gen");
       toast("生成失败：" + (e.message || e));
+    })
+    .then(function () {
+      $("gen-go").disabled = false;
     });
 }
 
@@ -2531,6 +2692,14 @@ $("imp-go").onclick = function () { importGo($("imp-text").value); };
 /* 生成弹窗 */
 $("gen-cancel").onclick = function () { closeModal("m-gen"); };
 $("gen-go").onclick = genGo;
+$("gen-dice").onclick = function () {
+  fillRandomIdea();
+  $("gen-idea").focus();
+};
+$("gen-rand").onclick = function () {
+  fillRandomIdea();
+  genGo();
+};
 
 /* 游戏页 */
 $("btn-back").onclick = backToShelf;
@@ -2579,7 +2748,7 @@ $("mm-reopen").onclick = function () {
     if (d && Array.isArray(d.opening) && d.opening.length) {
       w.pack.opening = d.opening;
       w.log = [{ role: "narr", text: d.opening.join("\n\n") }];
-      w.choices = ["继续", "四处看看", "开口"];
+      w.choices = fallbackChoices(w);
       w.turns = 0;
       saveWorks();
       closeLoading();
