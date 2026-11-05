@@ -1,0 +1,2408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小说改编工坊 · AI 互动叙事</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    min-height:100vh;color:#e8dcc8;
+    background:
+      radial-gradient(900px 520px at 50% -12%, rgba(179,64,47,.26), transparent 72%),
+      radial-gradient(700px 420px at 92% 112%, rgba(201,162,39,.10), transparent 72%),
+      #0b0810;
+    font-family:"Noto Serif SC","Songti SC","Source Han Serif SC","STSong",Georgia,serif;
+    line-height:1.9;
+  }
+  .view{max-width:760px;margin:0 auto;padding:26px 16px 20px;min-height:100vh;display:flex;flex-direction:column}
+  .view[hidden]{display:none}
+  .top{display:flex;align-items:flex-start;gap:12px}
+  .grow{flex:1;min-width:0}
+  .top h1{margin:0;font-size:22px;letter-spacing:.12em;color:#e6c98a;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top p{margin:5px 0 0;font-size:12px;letter-spacing:.1em;color:#8d8071;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ico{width:34px;height:34px;border-radius:9px;cursor:pointer;flex:none;
+    background:rgba(255,255,255,.04);border:1px solid rgba(201,162,39,.22);color:#c9b48f;font-size:15px;line-height:1;font-family:inherit}
+  .ico:hover{background:rgba(201,162,39,.14);color:#f0dcb4}
+
+  .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:22px 0 18px}
+  .store-tip{margin:-8px 0 16px;font-size:11.5px;color:#7c6f82;letter-spacing:.04em}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row2 input{width:100%}
+  .store-tip.warn{color:#d08a5a}
+  .big{padding:14px;border-radius:11px;cursor:pointer;font-family:inherit;font-size:15px;letter-spacing:.08em;
+    background:rgba(201,162,39,.07);border:1px solid rgba(201,162,39,.3);color:#e8dcc8}
+  .big:hover{background:rgba(201,162,39,.16)}
+  .big.pri{background:rgba(179,64,47,.2);border-color:rgba(224,86,47,.5);color:#f0c9a8}
+
+  .grid{display:grid;grid-template-columns:1fr;gap:12px}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.012));
+    border:1px solid rgba(201,162,39,.16);border-radius:12px;padding:16px 18px;cursor:pointer;transition:.16s}
+  .card:hover{border-color:rgba(201,162,39,.5);transform:translateY(-2px)}
+  .card h3{margin:0 0 6px;font-size:16px;color:#e6c98a;font-weight:500}
+  .card .meta{font-size:12px;color:#7d7166;letter-spacing:.06em}
+  .card .premise{font-size:14px;color:#b8a992;margin:8px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .empty{color:#6f655b;font-size:14px;text-align:center;padding:40px 20px}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0 14px}
+  .stat{background:rgba(255,255,255,.028);border:1px solid rgba(201,162,39,.16);border-radius:10px;padding:9px 11px}
+  .stat .lab{display:flex;justify-content:space-between;font-size:12px;letter-spacing:.1em;color:#a2937f}
+  .stat .lab b{color:#e8dcc8;font-weight:500}
+  .track{height:3px;background:rgba(255,255,255,.08);border-radius:2px;margin-top:7px;overflow:hidden}
+  .track i{display:block;height:100%;background:linear-gradient(90deg,#7a2a1e,#e0562f);transition:width .4s ease}
+
+  #p-log{flex:1;display:flex;flex-direction:column;gap:14px;padding-bottom:14px}
+  .msg{animation:fade .3s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .msg.narr{background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.012));
+    border:1px solid rgba(201,162,39,.13);border-radius:12px;padding:15px 18px;font-size:var(--narr-size,16px)}
+  .msg.narr p{margin:0 0 11px;text-indent:2em}
+  .msg.narr p:last-child{margin-bottom:0}
+  .msg.narr.streaming{border-color:rgba(201,162,39,.34)}
+  .msg.narr.streaming p:last-child:after{content:"▍";color:#c9a227;animation:caret 1s steps(2) infinite;margin-left:2px}
+  @keyframes caret{50%{opacity:0}}
+  .msg.you{align-self:flex-end;max-width:82%;background:rgba(201,162,39,.1);border:1px solid rgba(201,162,39,.3);
+    border-radius:12px 12px 3px 12px;padding:9px 14px;font-size:calc(var(--narr-size,16px) - 1px);color:#f0e0c2}
+  .msg.delta{align-self:flex-start;font-size:12px;color:#8d8071;padding-left:4px}
+  .msg.usage{align-self:flex-end;font-size:11px;color:#5f5666;letter-spacing:.03em;padding-right:4px}
+  .castpanel{display:flex;flex-direction:column;gap:9px;margin:-4px 0 2px;padding:11px 13px;
+    background:rgba(255,255,255,.022);border:1px solid rgba(201,162,39,.14);border-radius:10px}
+  .castpanel .quest{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 12px;font-size:12px;color:#a2947f}
+  .castpanel .quest .lab{font-size:10px;letter-spacing:.16em;color:#6d6152}
+  .castpanel .quest b{font-size:13.5px;font-weight:500;color:#e8cf9d;letter-spacing:.03em}
+  .castpanel .quest .risk{color:#d0755e}
+  .castpanel .who{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .castpanel .c{padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.028);
+    border:1px solid rgba(255,255,255,.07);min-width:0}
+  .castpanel .c .head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .castpanel .c .nm{font-size:12.5px;color:#ddcba8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .castpanel .c .at{font-size:10px;letter-spacing:.06em;white-space:nowrap;color:#7f8d99}
+  .castpanel .c .st{margin-top:3px;font-size:11.5px;line-height:1.55;color:#8d8071}
+  .castpanel .c.hostile{border-color:rgba(224,86,47,.32);background:rgba(179,64,47,.07)}
+  .castpanel .c.hostile .at{color:#e0562f}
+  .castpanel .c.friend{border-color:rgba(201,162,39,.3);background:rgba(201,162,39,.06)}
+  .castpanel .c.friend .at{color:#c9a227}
+  .msg.err{align-self:stretch;border:1px solid rgba(224,86,47,.5);background:rgba(179,64,47,.12);
+    border-radius:10px;padding:11px 14px;font-size:13px;color:#e8b39a;white-space:pre-wrap}
+  .msg.thinking{align-self:flex-start;font-size:13px;color:#a07f5a;letter-spacing:.08em}
+  .dots i{display:inline-block;width:5px;height:5px;margin-left:3px;border-radius:50%;background:#a07f5a;animation:blink 1.2s infinite}
+  .dots i:nth-child(2){animation-delay:.2s}
+  .dots i:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,60%,100%{opacity:.25}30%{opacity:1}}
+
+  .choices{display:flex;flex-direction:column;gap:8px;margin:2px 0 10px}
+  .choice{text-align:left;font-family:inherit;font-size:15px;line-height:1.6;cursor:pointer;
+    background:rgba(201,162,39,.05);border:1px solid rgba(201,162,39,.26);color:#e2d5bd;border-radius:10px;padding:11px 15px;transition:.16s}
+  .choice:hover{background:rgba(201,162,39,.14);border-color:rgba(201,162,39,.6);transform:translateX(3px)}
+  .choice[disabled]{opacity:.45;cursor:default;transform:none}
+
+  .composer{position:sticky;bottom:0;padding:8px 0 4px;background:linear-gradient(180deg,rgba(11,8,16,0),#0b0810 34%)}
+  .row{display:flex;gap:9px}
+  textarea{flex:1;resize:none;height:60px;padding:10px 12px;font-family:inherit;font-size:15px;line-height:1.6;
+    color:#e8dcc8;background:#151019;border:1px solid rgba(201,162,39,.24);border-radius:10px;outline:none}
+  textarea:focus{border-color:rgba(201,162,39,.6)}
+  #p-send{width:76px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:15px;
+    background:rgba(179,64,47,.24);border:1px solid rgba(224,86,47,.5);color:#f0c9a8}
+  #p-send[disabled]{opacity:.4;cursor:default}
+  .footnote{text-align:center;font-size:11px;color:#5e564c;letter-spacing:.08em;padding:5px 0 2px}
+
+  /* ===== 游戏页：顶栏与输入框常驻，只有正文区滚动 ===== */
+  html,body{overflow-x:hidden}
+  #play{height:100vh;height:100dvh;min-height:0;overflow:hidden;padding-bottom:6px;max-width:100%}
+  #play .top{flex:0 0 auto;z-index:6;padding-bottom:8px;min-width:0;
+    background:linear-gradient(180deg,#0b0810 74%,rgba(11,8,16,0))}
+  #play .stats{flex:0 0 auto;margin:6px 0 8px;min-width:0}
+  .stat{min-width:0}
+  .stat .lab{min-width:0}
+  .stat .lab span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat .lab b{white-space:nowrap}
+  #p-log{flex:1 1 auto;min-height:0;min-width:0;overflow-y:auto;overflow-x:hidden;
+    overscroll-behavior:contain;padding:2px 2px 10px;scroll-behavior:smooth}
+  #p-log::-webkit-scrollbar{width:5px}
+  #p-log::-webkit-scrollbar-thumb{background:rgba(201,162,39,.22);border-radius:3px}
+  #p-choices{flex:0 0 auto;min-width:0}
+  #p-choices:empty{display:none}
+  #play .composer{position:static;flex:0 0 auto;padding:8px 0 2px;background:none;min-width:0}
+  #play .footnote{padding:2px 0 0}
+  #play .top h1{font-size:19px}
+  @media (max-width:520px){
+    #play .top h1{font-size:17px}
+    #play .top p{font-size:11px}
+    .msg.narr{font-size:15px;padding:13px 14px}
+    .msg.narr p{text-indent:1.6em}
+    #p-send{width:64px;font-size:14px}
+  }
+  @media (max-height:620px){
+    #play .stats{margin:4px 0 6px}
+    .stat{padding:6px 9px}
+    textarea{height:48px}
+  }
+
+  .modal{position:fixed;inset:0;background:rgba(6,4,9,.88);display:none;align-items:flex-start;justify-content:center;
+    padding:36px 16px;overflow:auto;z-index:60}
+  .modal.open{display:flex}
+  .sheet{width:100%;max-width:560px;background:#120d16;border:1px solid rgba(201,162,39,.28);border-radius:14px;padding:22px}
+  .sheet h2{margin:0 0 16px;font-size:15px;letter-spacing:.16em;color:#c9a227;font-weight:500}
+  .field{margin-bottom:13px}
+  .field label{display:block;font-size:12px;letter-spacing:.08em;color:#8d8071;margin-bottom:5px}
+  .field input,.field select,.field textarea{width:100%;background:#0d0a11;border:1px solid rgba(201,162,39,.2);
+    border-radius:8px;color:#e8dcc8;font-family:inherit;font-size:14px;padding:9px 11px;outline:none}
+  .field textarea{resize:vertical;line-height:1.7}
+  .field .hintline{font-size:11px;color:#6f655b;margin-top:5px;line-height:1.6}
+  .sheet .actions2{display:flex;gap:9px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+  .sheet button{font-family:inherit;font-size:14px;padding:9px 16px;border-radius:8px;cursor:pointer;
+    background:rgba(201,162,39,.08);border:1px solid rgba(201,162,39,.35);color:#e8dcc8}
+  .sheet button.primary{background:rgba(179,64,47,.26);border-color:rgba(224,86,47,.55);color:#f0c9a8}
+  .sheet button.danger{border-color:rgba(224,86,47,.5);color:#e8a08a}
+  .drop{border:1px dashed rgba(201,162,39,.4);border-radius:10px;padding:26px;text-align:center;color:#8d8071;cursor:pointer;font-size:14px}
+  .drop:hover{background:rgba(201,162,39,.06)}
+  .drop.over{background:rgba(201,162,39,.12);border-color:rgba(201,162,39,.8)}
+  .sheet.wide{max-width:650px}
+  .tabs{display:flex;gap:8px;margin-bottom:14px}
+  .tabs button{flex:1;padding:8px;font-size:14px}
+  .tabs button.on{background:rgba(201,162,39,.2);border-color:rgba(201,162,39,.62);color:#f0dcb4}
+  .ck{background:rgba(255,255,255,.025);border:1px solid rgba(201,162,39,.16);border-radius:10px;margin-bottom:9px;overflow:hidden}
+  .ck summary{list-style:none;cursor:pointer;padding:11px 14px;display:flex;gap:9px;align-items:baseline}
+  .ck summary::-webkit-details-marker{display:none}
+  .ck summary b{color:#e6c98a;font-weight:500;font-size:14px;flex:none}
+  .ck summary span{font-size:12px;color:#7d7166;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ck.off{opacity:.45}
+  .ck-body{padding:8px 14px 14px;border-top:1px solid rgba(201,162,39,.1)}
+  .ck-row{display:flex;gap:8px}
+  .ck-row .field{flex:1;margin-bottom:9px}
+  .ck-acts{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+  .ck-acts button{font-size:12px;padding:6px 12px;border-radius:7px;cursor:pointer;
+    background:rgba(201,162,39,.08);border:1px solid rgba(201,162,39,.3);color:#d8cbb4;font-family:inherit}
+  .ck-acts button.del{border-color:rgba(224,86,47,.45);color:#e0a08a}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(10px);opacity:0;
+    background:#221824;border:1px solid rgba(201,162,39,.4);color:#e8dcc8;padding:10px 18px;border-radius:10px;
+    font-size:13px;transition:.25s;pointer-events:none;z-index:99}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (max-width:520px){
+    .view{padding:18px 12px 10px}
+    .top h1{font-size:19px}
+    .msg.narr{font-size:15.5px;padding:13px 14px}
+    .stat{padding:7px 9px}
+  }
+</style>
+</head>
+<body>
+
+<!-- 书架 -->
+<section id="shelf" class="view">
+  <header class="top">
+    <div class="grow">
+      <h1>小说改编工坊</h1>
+      <p>导入小说 · 生成剧情卡 · 与大模型边写边玩</p>
+    </div>
+    <button class="ico" id="btn-set" title="设置">⚙</button>
+  </header>
+  <div class="actions">
+    <button class="big" id="btn-import">导入小说</button>
+    <button class="big pri" id="btn-gen">从零生成</button>
+    <button class="big" id="btn-seed">内置示例</button>
+    <button class="big" id="btn-backup">导出存档</button>
+    <button class="big" id="btn-restore">导入存档</button>
+    <input type="file" id="file-json" accept=".json,application/json" hidden>
+  </div>
+  <p class="store-tip" id="store-tip"></p>
+  <div class="grid" id="works"></div>
+  <p class="empty" id="empty" hidden>还没有作品。导入一本小说，或者让模型从一句话开始写。</p>
+</section>
+
+<!-- 游戏 -->
+<section id="play" class="view" hidden>
+  <header class="top">
+    <button class="ico" id="btn-back" title="返回">←</button>
+    <div class="grow">
+      <h1 id="p-title">—</h1>
+      <p id="p-sub">—</p>
+    </div>
+    <button class="ico" id="btn-menu" title="菜单">⋯</button>
+  </header>
+  <div class="stats" id="p-stats"></div>
+  <main id="p-log"></main>
+  <div class="choices" id="p-choices"></div>
+  <div class="composer">
+    <div class="row">
+      <textarea id="p-input" placeholder="你想做什么？（Ctrl+Enter 发送）"></textarea>
+      <button id="p-send">行动</button>
+    </div>
+    <div class="footnote" id="p-mode">—</div>
+  </div>
+</section>
+
+<!-- 设置 -->
+<div class="modal" id="m-set">
+  <div class="sheet">
+    <h2>模型设置</h2>
+    <div class="field">
+      <label>接口地址 Base URL</label>
+      <input id="s-base" placeholder="https://api.openai.com/v1">
+      <div class="hintline">OpenAI 兼容地址。<br>OpenAI：https://api.openai.com/v1　DeepSeek：https://api.deepseek.com/v1　通义：https://dashscope.aliyuncs.com/compatible-mode/v1　本地 Ollama：http://127.0.0.1:11434/v1</div>
+    </div>
+    <div class="field">
+      <label>模型名</label>
+      <input id="s-model" placeholder="gpt-4o-mini / deepseek-chat / qwen-plus / llama3.1">
+    </div>
+    <div class="field">
+      <label>API Key</label>
+      <input id="s-key" type="password" placeholder="sk-...">
+      <div class="hintline">只存在本机浏览器。Ollama 可留空，但需设 OLLAMA_ORIGINS=* 才能被网页调用。</div>
+    </div>
+    <div class="field">
+      <label>温度（0.5 稳 ～ 1.2 野）</label>
+      <input id="s-temp" type="number" min="0" max="2" step="0.1" value="0.9">
+    </div>
+    <div class="field">
+      <label>单轮篇幅</label>
+      <select id="s-len">
+        <option value="1">短 · 200-350 字（爽快推进）</option>
+        <option value="2" selected>中 · 400-600 字（默认）</option>
+        <option value="3">长 · 700-1000 字（有环境与心理）</option>
+        <option value="4">很长 · 1200-1600 字（多轮对白）</option>
+      </select>
+      <div class="hintline">档位越高越容易跑题、越贵，但也越像小说。模型不听话时，把 max_tokens 一起调大。</div>
+    </div>
+    <div class="field">
+      <label>正文字号</label>
+      <select id="s-fs">
+        <option value="14">小 14px</option>
+        <option value="16" selected>标准 16px</option>
+        <option value="18">大 18px</option>
+        <option value="20">特大 20px</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>单价（元 / 百万 tokens，填 0 则不显示费用）</label>
+      <div class="row2">
+        <input id="s-pricein" type="number" min="0" step="0.1" placeholder="输入 2">
+        <input id="s-priceout" type="number" min="0" step="0.1" placeholder="输出 8">
+      </div>
+      <div class="hintline">DeepSeek 常见价：输入约 2、输出约 8；通义 qwen-plus 约 0.8 / 2。按你实际套餐改，估算仅供参考。</div>
+    </div>
+    <div class="field">
+      <label>最大输出 tokens（max_tokens）</label>
+      <input id="s-maxtok" type="number" min="256" max="8192" step="128" value="2048">
+      <div class="hintline">很多接口默认只给 512～1024，正文会被硬截断。写 2048 以上更安全；DeepSeek 上限 8192。</div>
+    </div>
+    <div class="actions2">
+      <button id="s-test">测试连接</button>
+      <button id="s-cancel">取消</button>
+      <button id="s-save" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 导入 -->
+<div class="modal" id="m-import">
+  <div class="sheet">
+    <h2>导入小说</h2>
+    <div class="drop" id="drop">点击选择 .txt / .md 文件，或把文件拖到这里</div>
+    <input type="file" id="file" accept=".txt,.md,text/plain,text/markdown" hidden>
+    <div class="field" style="margin-top:14px">
+      <label>或直接粘贴正文</label>
+      <textarea id="imp-text" style="height:130px" placeholder="把小说开头几千字粘在这里…"></textarea>
+    </div>
+    <div class="field">
+      <label>作品名（可留空，自动从文本推断）</label>
+      <input id="imp-title" placeholder="例如：烬月之约">
+    </div>
+    <div class="actions2">
+      <button id="imp-cancel">取消</button>
+      <button id="imp-go" class="primary">抽成剧情卡</button>
+    </div>
+  </div>
+</div>
+
+<!-- 生成 -->
+<div class="modal" id="m-gen">
+  <div class="sheet">
+    <h2>从零生成</h2>
+    <div class="field">
+      <label>一句话设定</label>
+      <textarea id="gen-idea" style="height:90px" placeholder="例：被逐出师门的女术士，在血月夜召唤了一个不肯说真名的欲魔。"></textarea>
+    </div>
+    <div class="field">
+      <label>题材</label>
+      <select id="gen-genre">
+        <option>奇幻</option><option>都市</option><option>科幻</option><option>武侠</option>
+        <option>悬疑</option><option>宫廷</option><option>末日</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>尺度</label>
+      <select id="gen-rating">
+        <option value="explicit">成人向（露骨）</option>
+        <option value="sensual">暧昧向（点到为止）</option>
+        <option value="clean">全年龄</option>
+      </select>
+    </div>
+    <div class="actions2">
+      <button id="gen-cancel">取消</button>
+      <button id="gen-go" class="primary">生成剧情卡</button>
+    </div>
+  </div>
+</div>
+
+<!-- 作品菜单 -->
+<div class="modal" id="m-menu">
+  <div class="sheet">
+    <h2 id="menu-title">作品</h2>
+    <div class="actions2" style="justify-content:stretch;flex-direction:column">
+      <button id="mm-edit">编辑剧情卡</button>
+      <button id="mm-chars">人物卡</button>
+      <button id="mm-sets">设定卡</button>
+      <button id="mm-dir">导演 · NPC 与事件</button>
+      <button id="mm-undo">退回上一轮</button>
+      <button id="mm-redo">重掷上一段</button>
+      <button id="mm-reopen">重写开场</button>
+      <button id="mm-export">导出记录（Markdown）</button>
+      <button id="mm-exporthtml">导出阅读版（HTML）</button>
+      <button id="mm-savejson">导出这部作品（JSON）</button>
+      <button id="mm-delete" class="danger">删除作品</button>
+      <button id="mm-close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 卡片库 -->
+<div class="modal" id="m-cards">
+  <div class="sheet wide">
+    <h2>卡片库</h2>
+    <div class="tabs">
+      <button id="tab-char" class="on">人物卡</button>
+      <button id="tab-set">设定卡</button>
+    </div>
+    <div id="card-list"></div>
+    <div class="actions2">
+      <button id="card-add">＋ 新增</button>
+      <button id="card-ai">AI 补卡</button>
+      <button id="card-close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 导演：NPC 自主与随机事件 -->
+<div class="modal" id="m-dir">
+  <div class="sheet" style="max-width:660px">
+    <h2>导演 · NPC 自主与随机事件</h2>
+    <div class="field">
+      <label><input type="checkbox" id="dir-on" style="width:auto;margin-right:8px">启用（NPC 会自己出手、随机事件会自己冒出来）</label>
+    </div>
+    <div class="field">
+      <label>每隔几轮让一个 NPC 主动行动（0 = 关闭）</label>
+      <input id="dir-every" type="number" min="0" max="10">
+    </div>
+    <div class="field">
+      <label>每隔几轮触发一个随机事件（0 = 关闭）</label>
+      <input id="dir-ev" type="number" min="0" max="20">
+    </div>
+    <div class="field">
+      <label>事件池（每条触发一次；想再用就点「重置」）</label>
+    </div>
+    <div id="ev-list"></div>
+    <div class="actions2">
+      <button id="ev-add">＋ 新增事件</button>
+      <button id="ev-ai">AI 生成 6 条</button>
+      <button id="ev-close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 剧情卡编辑 -->
+<div class="modal" id="m-pack">
+  <div class="sheet">
+    <h2>剧情卡 JSON</h2>
+    <div class="field">
+      <textarea id="pack-json" style="height:320px;font-family:ui-monospace,Consolas,monospace;font-size:12px"></textarea>
+      <div class="hintline">改人物、世界观、开场、状态条；保存后从当前进度继续。</div>
+    </div>
+    <div class="actions2">
+      <button id="pack-cancel">取消</button>
+      <button id="pack-save" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+"use strict";
+
+/* ================= 基础工具 ================= */
+var $ = function (id) { return document.getElementById(id); };
+var cfg = loadCfg();
+var works = loadWorks();
+var curId = null;
+var busy = false;
+var aborter = null;
+var llmLastUsage = null;
+
+function applyFont() {
+  var px = Number(cfg.fs) || 16;
+  document.documentElement.style.setProperty("--narr-size", px + "px");
+}
+
+function toast(msg) {
+  var t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._tid);
+  t._tid = setTimeout(function () { t.classList.remove("show"); }, 2200);
+}
+function openModal(id) { $(id).classList.add("open"); }
+function closeModal(id) { $(id).classList.remove("open"); }
+function esc(s) { return String(s == null ? "" : s); }
+function clamp(n, max) { return Math.max(0, Math.min(max || 100, Math.round(n))); }
+function uid() { return "w" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+/* ================= 存储 ================= */
+function loadCfg() {
+  try {
+    var c = JSON.parse(localStorage.getItem("jw-cfg") || "null");
+    if (c && c.base) return c;
+  } catch (e) {}
+  return { base: "", key: "", model: "", temp: 0.9, len: 2, maxTok: 2048 };
+}
+function saveCfg() {
+  try { localStorage.setItem("jw-cfg", JSON.stringify(cfg)); } catch (e) {}
+}
+function loadWorks() {
+  try {
+    var w = JSON.parse(localStorage.getItem("jw-works") || "[]");
+    return Array.isArray(w) ? w : [];
+  } catch (e) { return []; }
+}
+/* ================= 存储 ================= */
+function storeBytes() {
+  try { return (localStorage.getItem("jw-works") || "").length * 2; } catch (e) { return 0; }
+}
+
+function refreshStoreTip() {
+  var el = document.getElementById("store-tip");
+  if (!el) return;
+  var kb = Math.round(storeBytes() / 1024);
+  var done = 0;
+  works.forEach(function (w) { done += (w.archive || []).length; });
+  el.textContent = "本地存档 " + kb + " KB" + (done ? "　·　已归档旧回合 " + done + " 条" : "");
+  el.className = "store-tip" + (kb > 3600 ? " warn" : "");
+  if (kb > 3600) el.textContent += "　⚠ 接近上限，建议导出存档";
+}
+
+/* 存储吃紧时：把最老的回合挪进 archive（不参与上下文，只留阅读） */
+function slimWorks(keep) {
+  works.forEach(function (w) {
+    if (!Array.isArray(w.log)) w.log = [];
+    if (w.log.length > keep) {
+      w.archive = (w.archive || []).concat(w.log.slice(0, w.log.length - keep));
+      w.log = w.log.slice(-keep);
+    }
+    w.snaps = (w.snaps || []).slice(-8);
+    if (w.archive && w.archive.length > 600) w.archive = w.archive.slice(-600);
+  });
+}
+
+function saveWorks() {
+  var data;
+  try { data = JSON.stringify(works); } catch (e) { return; }
+  try {
+    localStorage.setItem("jw-works", data);
+    refreshStoreTip();
+    return true;
+  } catch (e0) { /* 超限，逐级瘦身 */ }
+
+  var limits = [160, 110, 70, 40, 20];
+  for (var i = 0; i < limits.length; i++) {
+    slimWorks(limits[i]);
+    try {
+      localStorage.setItem("jw-works", JSON.stringify(works));
+      refreshStoreTip();
+      toast("本地存储吃紧，旧回合已归档（阅读记录仍在）");
+      return true;
+    } catch (e) { /* 继续瘦身 */ }
+  }
+  toast("本地存储已满：先「导出存档」，再删掉旧作品");
+  refreshStoreTip();
+  return false;
+}
+function current() {
+  for (var i = 0; i < works.length; i++) if (works[i].id === curId) return works[i];
+  return null;
+}
+
+/* ================= 模型调用 ================= */
+function llm(messages, opt) {
+  opt = opt || {};
+  if (!cfg.base || !cfg.model) return Promise.reject(new Error("还没配置模型：点右上角 ⚙ 填 Base URL 和模型名"));
+  var url = cfg.base.replace(/\/+$/, "") + "/chat/completions";
+  var streaming = typeof opt.onDelta === "function";
+  var body = {
+    model: cfg.model,
+    temperature: opt.temp == null ? (cfg.temp || 0.9) : opt.temp,
+    messages: messages
+  };
+  if (streaming) {
+    body.stream = true;
+    body.stream_options = { include_usage: true };
+  }
+  if (cfg.maxTok) body.max_tokens = cfg.maxTok;
+
+  var headers = { "Content-Type": "application/json" };
+  if (cfg.key) headers["Authorization"] = "Bearer " + cfg.key;
+
+  aborter = new AbortController();
+  var ac = aborter;
+  var timer = setTimeout(function () { ac.abort(); }, opt.timeout || 90000);
+
+  function pick(j) {
+    return j && j.choices && j.choices[0] && j.choices[0].message
+      ? (j.choices[0].message.content || "") : "";
+  }
+
+  return fetch(url, {
+    method: "POST", headers: headers, body: JSON.stringify(body), signal: ac.signal
+  }).then(function (r) {
+    clearTimeout(timer);
+    if (!r.ok) {
+      return r.text().then(function (t) {
+        throw new Error("接口返回 HTTP " + r.status + "\n" + esc(t).slice(0, 200));
+      });
+    }
+    // 不支持流，或没开流式：整体读
+    if (!streaming || !r.body || !r.body.getReader) {
+      return r.json().then(function (j) {
+        if (j && j.usage) llmLastUsage = j.usage;
+        var c = pick(j);
+        if (!c) throw new Error("接口没有返回内容");
+        if (streaming) opt.onDelta(c, c);
+        return c;
+      });
+    }
+    var reader = r.body.getReader();
+    var dec = new TextDecoder("utf-8");
+    var buf = "", all = "";
+    function pump() {
+      return reader.read().then(function (res) {
+        if (res.done) return all;
+        buf += dec.decode(res.value, { stream: true });
+        var at;
+        while ((at = buf.indexOf("\n")) >= 0) {
+          var line = buf.slice(0, at).trim();
+          buf = buf.slice(at + 1);
+          if (line.indexOf("data:") !== 0) continue;
+          var payload = line.slice(5).trim();
+          if (!payload || payload === "[DONE]") continue;
+          try {
+            var j = JSON.parse(payload);
+            if (j && j.usage) llmLastUsage = j.usage;
+            var piece = j.choices && j.choices[0] && j.choices[0].delta
+              ? (j.choices[0].delta.content || "") : "";
+            if (piece) { all += piece; opt.onDelta(all, piece); }
+          } catch (e) { /* 半行，等下一块 */ }
+        }
+        return pump();
+      });
+    }
+    return pump().then(function (full) {
+      if (!full) throw new Error("接口没有返回内容");
+      return full;
+    });
+  });
+}
+
+/* 一轮回复的解析：新协议（正文 + META 块）优先，旧协议（纯 JSON）兼容 */
+function parseTurn(raw) {
+  var s = String(raw || "");
+  var at = s.indexOf("<<<META");
+  if (at >= 0) {
+    var text = s.slice(0, at).trim();
+    var tail = s.slice(at + 7).replace(/META\s*>>>?\s*$/, "").replace(/>>>\s*$/, "").trim();
+    var obj = null;
+    try { obj = parseJSON(tail); } catch (e) { obj = null; }
+    return {
+      narration: text,
+      choices: obj && Array.isArray(obj.choices) ? obj.choices.slice(0, 3).map(String) : [],
+      delta: obj && obj.delta && typeof obj.delta === "object" ? obj.delta : {},
+      quest: obj && obj.quest && typeof obj.quest === "object" ? obj.quest : null,
+      cast: obj && Array.isArray(obj.cast) ? obj.cast.slice(0, 4) : []
+    };
+  }
+  var d = null;
+  try { d = parseJSON(s); } catch (e) { d = null; }
+  if (d && (d.narration || d.choices)) {
+    return {
+      narration: String(d.narration || "").trim(),
+      choices: Array.isArray(d.choices) ? d.choices.slice(0, 3).map(String) : [],
+      delta: d.delta && typeof d.delta === "object" ? d.delta : {}
+    };
+  }
+  return { narration: s.trim(), choices: [], delta: {}, quest: null, cast: [] };
+}
+
+function parseJSON(s) {
+  if (!s) throw new Error("空返回");
+  var t = String(s).trim();
+  t = t.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  var a = t.indexOf("{"), b = t.lastIndexOf("}");
+  if (a >= 0 && b > a) t = t.slice(a, b + 1);
+  try { return JSON.parse(t); }
+  catch (e) {
+    t = t.replace(/,\s*([}\]])/g, "$1").replace(/[\u0000-\u001f]+/g, " ");
+    return JSON.parse(t);
+  }
+}
+
+/* ================= 剧情卡规范 ================= */
+function normChar(c) {
+  c = c || {};
+  return {
+    id: c.id || ("c" + Math.random().toString(36).slice(2, 8)),
+    name: String(c.name || "未命名"),
+    role: String(c.role || ""),
+    relation: String(c.relation || ""),
+    look: String(c.look || ""),
+    persona: String(c.persona || ""),
+    voice: String(c.voice || ""),
+    want: String(c.want || ""),
+    secret: String(c.secret || ""),
+    heat: Math.max(1, Math.min(5, Number(c.heat) || 3)),
+    mood: String(c.mood || ""),
+    active: c.active !== false
+  };
+}
+
+function normEvent(e) {
+  e = e || {};
+  return {
+    id: e.id || ("e" + Math.random().toString(36).slice(2, 8)),
+    title: String(e.title || "未命名事件"),
+    cond: String(e.cond || ""),
+    text: String(e.text || ""),
+    used: !!e.used
+  };
+}
+function normSetting(s) {
+  s = s || {};
+  return {
+    id: s.id || ("s" + Math.random().toString(36).slice(2, 8)),
+    name: String(s.name || "未命名"),
+    type: String(s.type || "地点"),
+    keys: String(s.keys || ""),
+    detail: String(s.detail || ""),
+    active: s.active !== false
+  };
+}
+
+function normalizePack(p, fallbackTitle) {
+  p = p || {};
+  var stats = Array.isArray(p.stats) ? p.stats : [];
+  stats = stats.filter(function (s) { return s && s.key && s.label; }).slice(0, 5);
+  while (stats.length < 3) {
+    var defaults = [
+      { key: "heat", label: "张力", start: 20 },
+      { key: "bond", label: "羁绊", start: 0 },
+      { key: "will", label: "意志", start: 40 }
+    ];
+    var d = defaults[stats.length];
+    if (!stats.some(function (s) { return s.key === d.key; })) stats.push(d);
+    else break;
+  }
+  stats = stats.map(function (s) {
+    var mx = Number(s.max) || 100;
+    return { key: String(s.key), label: String(s.label), start: clamp(Number(s.start) || 0, mx), max: mx };
+  });
+
+  var opening = Array.isArray(p.opening) ? p.opening.filter(Boolean) : [];
+  if (!opening.length) opening = ["故事从这里开始。你站在" + (p.place || "陌生的地方") + "，四周安静得能听见自己的心跳。"];
+
+  return {
+    title: p.title || fallbackTitle || "未命名作品",
+    subtitle: p.subtitle || (p.genre ? p.genre + " · 互动小说" : "互动小说"),
+    genre: p.genre || "奇幻",
+    premise: p.premise || "",
+    world: p.world || "",
+    style: p.style || "第二人称，感官细节充足，句子长短交错。",
+    rating: p.rating || "explicit",
+    npc: p.npc || "",
+    pronoun: p.pronoun || "他",
+    place: p.place || "",
+    stats: stats,
+    opening: opening,
+    hooks: Array.isArray(p.hooks) ? p.hooks.filter(Boolean).slice(0, 6) : [],
+    rules: Array.isArray(p.rules) ? p.rules.filter(Boolean).slice(0, 6) : [],
+    events: (Array.isArray(p.events) ? p.events : []).slice(0, 24).map(normEvent),
+    director: {
+      on: p.director && p.director.on === false ? false : true,
+      every: Math.max(0, Math.min(10, Number(p.director && p.director.every) || 2)),
+      evEvery: Math.max(0, Math.min(20, Number(p.director && p.director.evEvery) || 5))
+    },
+    characters: (Array.isArray(p.characters) ? p.characters : []).slice(0, 12).map(normChar),
+    settings: (Array.isArray(p.settings) ? p.settings : []).slice(0, 12).map(normSetting)
+  };
+}
+
+function createWork(pack) {
+  var w = {
+    id: uid(),
+    pack: pack,
+    state: {},
+    log: [],
+    choices: ["继续", "四处看看", "开口说话"],
+    summary: "",
+    turns: 0,
+    created: Date.now(),
+    updated: Date.now()
+  };
+  pack.stats.forEach(function (s) { w.state[s.key] = s.start; });
+  var open = pack.opening.join("\n\n");
+  w.log.push({ role: "narr", text: open });
+  works.unshift(w);
+  saveWorks();
+  return w;
+}
+
+/* ================= 内置示例：《天啊！我变成了龟》 ================= */
+var GUI_WORLD = "网文《天啊！我变成了龟》（作者：往三十）第 1-30 章的世界。"
+  + "修炼体系：第一境灵武境（妖族称妖兽境）一至十重；速度、防御、攻击三项各自计境界，三项都到 N 才能破 N 重，单项上限 10，三项最多相差两个境界；"
+  + "三项满十重后必须开辟元力池才能进入元武境，失败则终生无缘元武；元武境可御空飞行。"
+  + "突破所需经验点等于当前境界数值（一重升二重要 1 点，四重升五重要 3 点），经验点上限即该数值，满值后击杀不再获得。"
+  + "经验点结算：击杀同境界 +1、低一境 +0.5、低两境 +0、高一境 +2、高两境 +3。"
+  + "珍宝与精脉按年份折算：一重对百年、二重对两百年……十重对千年、元武一重对千一百年；同境界 +1、低一境 +0.5、低两境 0。"
+  + "元力池是体内一个黑色圆环，古神吞天经可吞噬万物（泥土、精气、敌人攻击）转成元力存入，元力只给战力、不给经验点。"
+  + "古神吞天经：第一卷满 20 点=与所有妖兽沟通，满 50 点=与所有生物沟通，第二卷满 100 点=开辟元力池。"
+  + "地图扫描需主动开启，范围随境界（二重 400 米、三重 500、四重 600、六重 800、十重 1200、元武一重 1500、元武二重 1800 米）。"
+  + "技能：袭杀→暗影袭杀→虚空暗杀术→虚空吞噬；磐石震荡→磐石印→虚空震荡→不灭虚空印；秘术·暴动（一分钟全属性 +50%，冷却三天）；刺骨之吸（把敌人吸向自己撞骨刺）。"
+  + "天赋·反击（被攻击回敬 55% 伤害）、天赋·地王神印（脚踏大地不可被击飞）。"
+  + "归墟神境：约一百平方的随身空间，可藏身储物，但装不下整条精脉。"
+  + "妖兽森林—清风镇（龙家、雪家）—沉岩山脉（石岩门派、沉岩兽王）—万兽山。";
+
+var GUI_CHARACTERS = [
+  { name: "叶缺", role: "主角，穿越成陆龟的现代社畜", relation: "玩家本人", look: "巴掌大，黑金龟壳带一圈骨刺，进化后体型渐大", persona: "怕死、记仇、贪吃、嘴碎，但吃了你家的东西就一定救你", voice: "现代吐槽腔，自称老子/龟爷爷，给敌人起外号（孙贼、黄屎、兄die）；被叫死王八必纠正：请不要在王八前面加一个死字", want: "活得久、吃得饱、把仇报了", secret: "其实怕孤单，救人是因为想起自己死前的眼睛", active: true },
+  { name: "系统", role: "吞噬合成进化系统", relation: "绑定在叶缺身上", look: "半透明面板", persona: "机械、只报事实，从不共情", voice: "所有提示以叮！开头，用【】括起，例如【叮！宿主击杀三重妖兽，获得经验点 2。】", want: "让宿主进化", secret: "从不解释规则背后的原因", active: true },
+  { name: "荒林狼", role: "一重妖兽，开局的第一口食", relation: "被叶缺反杀", look: "灰毛，牙口好", persona: "饥饿、直接", voice: "不会说话，只有低吼", want: "吃掉这只龟", secret: "它咬龟壳崩了牙", active: true },
+  { name: "雪凌洛", role: "清风镇雪家小姐", relation: "被叶缺从墙洞救出，喊他小龟龟", look: "十六七岁，白净，眼睛哭肿", persona: "娇柔但不蠢，怕死又肯分珍宝", voice: "哭腔，句句离不开小龟龟，请求时用好不好、行不行", want: "活着回到家族", secret: "她其实看出这只龟在算计她的珍宝", active: false },
+  { name: "李黑", role: "绰号屌爷的二重武者", relation: "收钱毒杀雪家，后被雪总管灭口", look: "獐头鼠目，背个药篼", persona: "市井粗人，欺软怕硬", voice: "张口吗的、他娘的，被上级呵斥立刻是是是", want: "拿钱办事", secret: "黑鼠是他的上线", active: false },
+  { name: "黑鼠", role: "清风镇五重黑商，卖毒药", relation: "李黑的供货人", look: "瘦，指甲黑", persona: "阴狠、算计", voice: "阴阳怪气，见客先嘿嘿两声，报价拖长音", want: "两头吃钱", secret: "他也在打雪家珍宝的主意", active: false },
+  { name: "雪总管", role: "雪家总管，实为内鬼", relation: "屠门主谋", look: "素衣，腰背笔直", persona: "恭顺到发黏，转身就下杀手", voice: "对主家喊小姐老爷，杀人前只淡淡一句你知道得太多了", want: "吞掉雪家家产", secret: "背后是雪龙峰长老", active: false },
+  { name: "龙家长子", role: "清风镇龙家少爷，五重", relation: "追杀雪凌洛", look: "锦衣，佩玉", persona: "纨绔、看不起人", voice: "自称本少爷，开口必带哪里来的死王八，受伤后只会尖叫", want: "抢人抢宝", secret: "他怕他爹", active: false },
+  { name: "沉岩兽王", role: "沉岩山脉妖兽之主，元武境二重", relation: "精脉被叶缺抢，扬言上万兽山告状", look: "形如黄石巨兽，隆起岩石的天赋", persona: "傲慢、护食、记仇", voice: "自称本座，动怒就掉成老子；宣判式口气：你已经犯了必死之罪", want: "保住领地与精脉", secret: "伤一直没好，自爆是最后手段", active: false },
+  { name: "石延枫", role: "石岩门派掌门，元武境二重", relation: "儿子被叶缺所杀", look: "青袍，眼神像刀", persona: "威压、短句、不解释", voice: "杀我儿子，你给我纳命来！一只不留！", want: "拿叶缺的血祭儿子", secret: "门派的星级武器不在他手上", active: false },
+  { name: "石步宇", role: "石岩门派黑袍长老，元武境一重", relation: "地塔第六层被叶缺所杀", look: "黑袍，脸瘦", persona: "对外恭谨，遇险就谈条件", voice: "对掌门只说是一个是；被逼急了破口：老子就是死也不会告诉你", want: "借地火突破", secret: "他知道精脉在塔底", active: false },
+  { name: "张士林", role: "珍宝阁守阁长老，十重", relation: "被叶缺吓到开阵反被杀", look: "白发，抱着一株草", persona: "小人、爱自辩", voice: "喃喃我值守珍宝阁二十年，没有功劳也有苦劳；被抓就哭腔别杀我", want: "偷偷拿走一株就好", secret: "他早就在监守自盗", active: false },
+  { name: "归墟天龟", role: "龟类妖兽老祖宗", relation: "返祖幻象中现身一次", look: "身长十多万米，背甲像一整片大陆", persona: "不在人间，只留神念", voice: "不开口，天地间只响起两个字：归墟", want: "无", secret: "它给了叶缺万分之一的归墟神境", active: false }
+];
+
+var GUI_SETTINGS = [
+  { name: "妖兽森林", type: "地点", keys: "妖兽森林,森林,草丛,灌木,林子", detail: "分外围、中部、深处。外围一至三重妖兽，深处有兽王土龙（元武一重）。血腥味会引来成群妖兽。", active: true },
+  { name: "清风镇", type: "地点", keys: "清风镇,镇上,镇子,雪家,龙家", detail: "龙家与雪家两大家族。镇上武者多为二到五重，黑市卖融水之类的毒药。", active: true },
+  { name: "沉岩山脉", type: "地点", keys: "沉岩山脉,山脉,石山,岩壁,地缝", detail: "灰色石山，层层叠压，地下有大量裂缝与岩浆，精脉藏在地底。", active: true },
+  { name: "石岩门派", type: "地点", keys: "石岩门派,门派,弟子,掌门,珍宝阁,地塔", detail: "建在半空石台上的门派，门前有阵法光罩。珍宝阁分四层，修炼地塔七层，塔底封着一条百米精脉。", active: true },
+  { name: "归墟神境", type: "地点", keys: "归墟神境,随身空间,空间,钻进去", detail: "叶缺的随身空间，约一百平方，灰色、安静、什么都没有。可藏身储物，但脆弱，装不下整条精脉。", active: true },
+  { name: "万兽山", type: "地点", keys: "万兽山,兽王,告状", detail: "比沉岩山脉更高一层的妖兽势力，连兽王都要用汇报两个字。", active: true }
+];
+
+var SEEDS = [
+  {
+    title: "天啊！我变成了龟",
+    subtitle: "穿越成龟 · 吞噬合成进化（从第 1 章开始）",
+    genre: "玄幻 · 妖兽流",
+    premise: "现代社畜叶缺车祸魂穿成一只巴掌大的陆龟，绑定吞噬合成进化系统。他靠反击天赋和卡境界刷经验，从零重一路爬到元武境。",
+    world: GUI_WORLD,
+    style: "第二人称现在时，爽文节奏 + 现代吐槽。系统提示以【叮！…】形式插在叙述中。暴力血腥直写，不淡化。",
+    rating: "explicit",
+    npc: "叶缺（玩家）",
+    pronoun: "他",
+    place: "妖兽森林·外围",
+    stats: [
+      { key: "realm", label: "境界", start: 0, max: 10 },
+      { key: "exp", label: "经验点", start: 0, max: 1 },
+      { key: "def", label: "防御", start: 1, max: 10 },
+      { key: "spd", label: "速度", start: 0, max: 10 },
+      { key: "atk", label: "攻击", start: 0, max: 10 }
+    ],
+    opening: [
+      "【叮！吞噬合成进化系统激活成功！】",
+      "后脑勺一阵钝痛。你睁开眼，世界是歪的，草叶像树一样高。",
+      "你想抬手揉眼睛，看到的是两只灰扑扑的爪子，尖，带泥。你张开嘴，发出的是「咕」。",
+      "面板浮在眼前——【宿主：叶缺　境界：0/10（无）　进化：陆龟（普通妖兽）　天赋：反击（被攻击时回敬攻击者 50% 伤害）　速度 0.1/10　防御 1/10　攻击 0.1/10　经验点：0　武学：无境界，无法开启】",
+      "远处草丛响了一下。有什么东西在朝这边过来。"
+    ],
+    hooks: ["吃掉高位妖兽的尸体就能加速进化", "人类的密谋会把他卷进雪家的血案", "经验点满值必须用掉才能继续刷"],
+    events: [
+      { title: "崩牙的狼", cond: "在妖兽森林外围", text: "三只荒林狼顺着血腥味摸过来。走在最后的那只瘸着腿，嘴里的牙缺了一颗——就是之前咬你壳崩掉的那只。" },
+      { title: "背药篓的人", cond: "靠近森林边缘", text: "一个背着药篓的瘦子从林子里钻出来，看见地上有水缸大的龟壳，眼睛先亮了一下，然后开始找石头。" },
+      { title: "腐叶下的根", cond: "无", text: "一场雨把腐叶冲开，露出半截发光的根须，看年份不短，像是被人埋在这里很久了。" },
+      { title: "远处的惨叫", cond: "无", text: "林子深处传来断续的惨叫，有人类被什么东西围住了，喊声一声比一声弱。" }
+    ],
+    rules: [
+      "系统提示一律以【叮！】开头，格式统一，不解释机制",
+      "数值严格按体系结算，不越级突破，不凭空给新能力",
+      "叶缺必须保留现代吐槽与现代梗",
+      "玩家做什么就写什么，血腥暴力直写，不淡化",
+      "处境不利就让叶缺受伤濒死，死亡就写终局"
+    ],
+    characters: GUI_CHARACTERS.map(function (c, i) {
+      var o = JSON.parse(JSON.stringify(c));
+      o.active = (i < 3);
+      return o;
+    }),
+    settings: GUI_SETTINGS.map(function (s, i) {
+      var o = JSON.parse(JSON.stringify(s));
+      o.active = true;
+      return o;
+    })
+  },
+  {
+    title: "天啊！我变成了龟 · 地塔之后",
+    subtitle: "元武境二重 · 从第 30 章之后开始",
+    genre: "玄幻 · 妖兽流",
+    premise: "你已经是元武境二重的大地龙龟，刚洗劫完石岩门派珍宝阁、杀掉石步宇，正贴着修炼地塔第七层的百米精脉吸收。石延枫回来了。",
+    world: GUI_WORLD,
+    style: "第二人称现在时，爽文节奏 + 现代吐槽。系统提示以【叮！…】形式插在叙述中。暴力血腥直写，不淡化。",
+    rating: "explicit",
+    npc: "叶缺（玩家）",
+    pronoun: "他",
+    place: "石岩门派·修炼地塔第七层",
+    stats: [
+      { key: "realm", label: "境界", start: 12, max: 20 },
+      { key: "exp", label: "经验点", start: 0, max: 30 },
+      { key: "def", label: "防御", start: 6, max: 100 },
+      { key: "spd", label: "速度", start: 2, max: 100 },
+      { key: "atk", label: "攻击", start: 0, max: 100 }
+    ],
+    opening: [
+      "【叮！开始吸收沉岩精气，经验点 +0.01。】",
+      "塔底的风、火、毒都散了。你四只爪子按在地上，像一根钉进地底的柱子——地王神印压着，整座塔都撼不动你。",
+      "百米长的光脉就在你身下，一下一下往你胸口那个黑色的环里灌。",
+      "上面七层，石延枫杀完了满山妖兽回来了。他看见一座空掉的珍宝阁、一具死在楼里的长老、一塔死掉的弟子，和这座正在冒热气的地塔。",
+      "【叮！石延枫已进入地塔入口。】【叮！锁定了你的气息。】",
+      "地王神印只保你不被击飞，不保你打赢一个元武境二重。精脉还剩七成。"
+    ],
+    hooks: ["继续吸精脉就会与石延枫正面撞上", "兽王已上万兽山告状，追兵在路上", "石延枫手里还有星级武器"],
+    events: [
+      { title: "兽王带路", cond: "通往万兽山的方向", text: "地面传来极沉的震动。一群妖兽踩着碎石往山门来，走在最前面那头黄石巨兽少了一只前爪——它回来认路了。" },
+      { title: "星级武器", cond: "石延枫在场且被逼急", text: "石延枫从袖口抽出一道银白的光，空气被割开的声音比火风声还细，地塔的石壁无声地裂了一指宽。" },
+      { title: "塔要塌了", cond: "在修炼地塔底层", text: "第七层的石壁开始渗水，岩浆的味道顺着裂缝往上爬。这座塔撑不了太久，精脉还在往下沉。" },
+      { title: "纸鹤", cond: "无", text: "一只纸鹤穿过火幕落在你面前，展开是一片雪白的字：小龟龟，你在哪。" }
+    ],
+    rules: [
+      "系统提示一律以【叮！】开头，格式统一，不解释机制",
+      "数值严格按体系结算，不越级突破，不凭空给新能力",
+      "叶缺必须保留现代吐槽与现代梗",
+      "玩家做什么就写什么，血腥暴力直写，不淡化",
+      "处境不利就让叶缺受伤濒死，死亡就写终局"
+    ],
+    characters: GUI_CHARACTERS.map(function (c) {
+      var o = JSON.parse(JSON.stringify(c));
+      o.active = ["叶缺", "系统", "石延枫", "沉岩兽王", "雪凌洛", "归墟天龟"].indexOf(c.name) >= 0;
+      return o;
+    }),
+    settings: GUI_SETTINGS.map(function (s) {
+      var o = JSON.parse(JSON.stringify(s));
+      o.active = true;
+      return o;
+    })
+  }
+];
+
+/* 把内置示例灌进书架；重复标题不重复添加 */
+function seedWorks(silent) {
+  var added = 0;
+  SEEDS.forEach(function (seed) {
+    if (works.some(function (w) { return w.pack.title === seed.title; })) return;
+    var pack = normalizePack(JSON.parse(JSON.stringify(seed)), seed.title);
+    var w = {
+      id: uid(),
+      pack: pack,
+      state: {},
+      log: [],
+      choices: ["继续", "四处看看", "开口说话"],
+      summary: "",
+      turns: 0,
+      created: Date.now(),
+      updated: Date.now()
+    };
+    pack.stats.forEach(function (s) { w.state[s.key] = s.start; });
+    w.log.push({ role: "narr", text: pack.opening.join("\n\n") });
+    works.push(w);
+    added++;
+  });
+  if (added) { saveWorks(); if (!silent) toast("已载入 " + added + " 部内置示例"); }
+  else if (!silent) toast("示例已经在书架上了");
+  renderShelf();
+  return added;
+}
+
+
+/* ================= 带封面的阅读版导出 ================= */
+function storyHTML(w) {
+  function E(t) {
+    return String(t == null ? "" : t)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  var p = w.pack || {};
+  var body = [];
+  (w.archive || []).concat(w.log || []).forEach(function (e) {
+    if (e.role === "you") body.push('<div class="me">' + E(e.text) + "</div>");
+    else if (e.role === "narr") {
+      String(e.text).split(/\n{2,}/).forEach(function (x) {
+        if (x.trim()) body.push("<p>" + E(x) + "</p>");
+      });
+    }
+  });
+
+  var cast = (p.characters || []).filter(function (c) { return c.active; }).slice(0, 12).map(function (c) {
+    return "<li><b>" + E(c.name) + "</b>" +
+      (c.role ? "<i>" + E(c.role) + "</i>" : "") +
+      (c.want ? "<em>" + E(c.want) + "</em>" : "") + "</li>";
+  }).join("");
+
+  var stats = (p.stats || []).map(function (x) {
+    return E(x.label) + " " + (w.state[x.key] || 0) + "/" + (x.max || 100);
+  }).join("　·　");
+
+  var css = [
+    "*{box-sizing:border-box}",
+    "body{margin:0;background:#0b0810;color:#e6dcc8;line-height:2;",
+    "font-family:'Noto Serif SC','Songti SC','PingFang SC','Microsoft YaHei',serif}",
+    ".wrap{max-width:720px;margin:0 auto;padding:0 20px 80px}",
+    "header{padding:56px 0 26px;border-bottom:1px solid rgba(201,162,39,.18);margin-bottom:34px}",
+    ".kicker{font-size:11px;letter-spacing:.34em;color:#a8845a;margin-bottom:16px}",
+    "h1{margin:0;font-size:30px;letter-spacing:.06em;color:#f0dcb4;font-weight:600;line-height:1.4}",
+    ".sub{margin:10px 0 0;font-size:13px;letter-spacing:.14em;color:#8d8071}",
+    ".pre{margin:18px 0 0;font-size:14.5px;color:#b9ac97;border-left:2px solid rgba(201,162,39,.4);padding-left:12px}",
+    ".stats{margin:22px 0 0;font-size:12px;color:#9a8b76;letter-spacing:.06em}",
+    ".cast{list-style:none;padding:0;margin:22px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}",
+    ".cast li{font-size:12.5px;color:#8d8071;line-height:1.7}",
+    ".cast b{color:#d8c6a4;font-weight:500;margin-right:8px}",
+    ".cast i{color:#6f6470;font-style:normal;margin-right:8px}",
+    ".cast em{color:#8a7a60;font-style:normal}",
+    "main p{margin:0 0 20px;font-size:17px;text-indent:2em;color:#e3d8c6}",
+    "main .me{margin:24px 0;padding:10px 14px;border-left:2px solid rgba(201,162,39,.5);",
+    "color:#e8d3a8;font-size:15.5px;background:rgba(201,162,39,.05)}",
+    "footer{margin-top:60px;padding-top:20px;border-top:1px solid rgba(201,162,39,.12);",
+    "font-size:11.5px;color:#5e564c;letter-spacing:.1em;text-align:center}",
+    "@media(max-width:560px){h1{font-size:23px}main p{font-size:16px}.cast{grid-template-columns:1fr}}",
+    "@media print{body{background:#fff;color:#111}.wrap{max-width:none}main p{color:#111}}"
+  ].join("");
+
+  return "<!DOCTYPE html>\n<html lang=\"zh-CN\"><head><meta charset=\"UTF-8\">" +
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+    "<title>" + E(p.title) + "</title><style>" + css + "</style></head><body><div class=\"wrap\">" +
+    "<header><div class=\"kicker\">互 动 小 说 · 阅 读 版</div>" +
+    "<h1>" + E(p.title) + "</h1>" +
+    (p.subtitle ? "<p class=\"sub\">" + E(p.subtitle) + "</p>" : "") +
+    (p.premise ? "<p class=\"pre\">" + E(p.premise) + "</p>" : "") +
+    (stats ? "<div class=\"stats\">" + stats + "</div>" : "") +
+    (cast ? "<ul class=\"cast\">" + cast + "</ul>" : "") +
+    "</header><main>" + body.join("\n") + "</main>" +
+    "<footer>由「小说改编工坊」导出 · " + new Date().toLocaleString() +
+    " · " + (w.turns || 0) + " 轮</footer></div></body></html>";
+}
+
+/* ================= 存档导出 / 导入 ================= */
+function stampNow() {
+  var d = new Date();
+  function p(n) { return (n < 10 ? "0" : "") + n; }
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes());
+}
+
+function download(filename, text, mime) {
+  var blob = new Blob([text], { type: mime || "application/octet-stream" });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1200);
+}
+
+function exportJSON(list, name) {
+  var payload = { app: "novel-workshop", v: 1, at: Date.now(), works: list };
+  download(name, JSON.stringify(payload, null, 1), "application/json");
+  toast("已导出 " + list.length + " 部作品");
+}
+
+function importJSON(file) {
+  var fr = new FileReader();
+  fr.onload = function () {
+    try {
+      var d = JSON.parse(fr.result);
+      var arr = Array.isArray(d) ? d : (d && Array.isArray(d.works) ? d.works : null);
+      if (!arr) throw new Error("这不是工坊的存档文件");
+      var added = 0;
+      arr.forEach(function (w) {
+        if (!w || !w.pack || !w.pack.title) return;
+        if (w.id && works.some(function (x) { return x.id === w.id; })) return;
+        w.id = w.id || uid();
+        w.pack = normalizePack(w.pack, w.pack.title);
+        w.state = w.state || {};
+        w.log = Array.isArray(w.log) ? w.log : [];
+        w.snaps = Array.isArray(w.snaps) ? w.snaps.slice(-8) : [];
+        w.archive = Array.isArray(w.archive) ? w.archive : [];
+        works.unshift(w);
+        added++;
+      });
+      saveWorks();
+      renderShelf();
+      toast(added ? "导入 " + added + " 部作品" : "没有新作品（这份存档已存在）");
+    } catch (e) {
+      toast("导入失败：" + String(e.message || e).slice(0, 60));
+    }
+  };
+  fr.readAsText(file, "utf-8");
+}
+
+/* ================= 书架 ================= */
+function renderShelf() {
+  var box = $("works");
+  box.innerHTML = "";
+  $("empty").hidden = works.length > 0;
+  refreshStoreTip();
+
+  works.forEach(function (w) {
+    var d = document.createElement("div");
+    d.className = "card";
+
+    var h = document.createElement("h3");
+    h.textContent = w.pack.title;
+
+    var meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = (w.pack.genre || "") + " · " + w.turns + " 轮 · " +
+      new Date(w.updated).toLocaleDateString();
+
+    var pre = document.createElement("p");
+    pre.className = "premise";
+    pre.textContent = w.pack.premise || w.pack.subtitle || "";
+
+    d.appendChild(h); d.appendChild(meta); d.appendChild(pre);
+    d.onclick = function () { openWork(w.id); };
+    box.appendChild(d);
+  });
+}
+
+function openWork(id) {
+  curId = id;
+  var w = current();
+  if (!w) return;
+  ensureCards(w);
+  w.pending = null;
+  $("shelf").hidden = true;
+  $("play").hidden = false;
+  $("p-send").disabled = false;
+  $("p-input").disabled = false;
+  $("p-title").textContent = w.pack.title;
+  $("p-sub").textContent = w.pack.subtitle || "";
+  renderStats();
+  renderLog();
+  renderChoices();
+  updateMode();
+  window.scrollTo({ top: 0 });
+}
+
+function backToShelf() {
+  $("play").hidden = true;
+  $("shelf").hidden = false;
+  curId = null;
+  renderShelf();
+  window.scrollTo({ top: 0 });
+}
+
+/* ================= 游戏渲染 ================= */
+function renderStats() {
+  var w = current(); if (!w) return;
+  var box = $("p-stats");
+  box.innerHTML = "";
+  var cols = Math.min(w.pack.stats.length, 5);
+  if (window.innerWidth < 560) cols = Math.min(cols, 3);
+  else if (window.innerWidth < 720) cols = Math.min(cols, 4);
+  box.style.gridTemplateColumns = "repeat(" + cols + ",minmax(0,1fr))";
+  w.pack.stats.forEach(function (s) {
+    var v = w.state[s.key] || 0;
+    var mx = s.max || 100;
+    var d = document.createElement("div");
+    d.className = "stat";
+    var lab = document.createElement("div");
+    lab.className = "lab";
+    var a = document.createElement("span"); a.textContent = s.label;
+    var b = document.createElement("b"); b.textContent = v + "/" + mx;
+    lab.appendChild(a); lab.appendChild(b);
+    var track = document.createElement("div");
+    track.className = "track";
+    var bar = document.createElement("i");
+    bar.style.width = Math.max(0, Math.min(100, v / mx * 100)) + "%";
+    track.appendChild(bar);
+    d.appendChild(lab); d.appendChild(track);
+    box.appendChild(d);
+  });
+}
+
+function scrollLog(force, smooth) {
+  var el = document.getElementById("p-log");
+  if (!el) return;
+  // 用户正往上翻看历史时不要抢滚动
+  var gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+  if (!force && gap > 140) return;
+  if (smooth) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  else el.scrollTop = el.scrollHeight;
+}
+
+function renderLog() {
+  var w = current(); if (!w) return;
+  var box = $("p-log");
+  box.innerHTML = "";
+  var arch = (w.archive || []).length;
+  if (arch) {
+    var tipEl = document.createElement("div");
+    tipEl.className = "msg delta";
+    tipEl.textContent = "（更早的 " + arch + " 条已归档，点菜单「导出记录」可看全文）";
+    box.appendChild(tipEl);
+  }
+  var start = Math.max(0, w.log.length - 80);
+  for (var i = start; i < w.log.length; i++) {
+    var e = w.log[i];
+    if (e.role === "cast") {
+      var cd = null;
+      try { cd = JSON.parse(e.text); } catch (err) { cd = null; }
+      if (cd) { box.appendChild(castNode(cd.quest, cd.cast)); continue; }
+    }
+    box.appendChild(makeMsg(e.role, e.text));
+  }
+  scrollLog(true);
+}
+
+function makeMsg(kind, text) {
+  var d = document.createElement("div");
+  d.className = "msg " + kind;
+  if (kind === "narr") {
+    var ps = String(text).split("\n\n");
+    for (var i = 0; i < ps.length; i++) {
+      if (!ps[i]) continue;
+      var p = document.createElement("p");
+      p.textContent = ps[i];
+      d.appendChild(p);
+    }
+  } else {
+    d.textContent = text;
+  }
+  return d;
+}
+
+function appendMsg(kind, text) {
+  $("p-log").appendChild(makeMsg(kind, text));
+  scrollLog(true);
+}
+
+function renderChoices() {
+  var w = current(); if (!w) return;
+  var box = $("p-choices");
+  box.innerHTML = "";
+  (w.choices || []).slice(0, 3).forEach(function (t) {
+    var b = document.createElement("button");
+    b.className = "choice";
+    b.textContent = t;
+    b.disabled = busy;
+    b.onclick = function () { submit(t); };
+    box.appendChild(b);
+  });
+}
+
+function estTokens(str) {
+  str = String(str || "");
+  var cjk = (str.match(/[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]/g) || []).length;
+  var rest = str.length - cjk;
+  return Math.round(cjk + rest / 3.5);
+}
+
+function fmtNum(x) {
+  x = Math.round(x || 0);
+  if (x >= 1000000) return (x / 1000000).toFixed(2) + "M";
+  if (x >= 10000) return (x / 1000).toFixed(1) + "k";
+  return String(x);
+}
+
+function costOf(pin, pout) {
+  var a = Number(cfg.priceIn), b = Number(cfg.priceOut);
+  if (!isFinite(a) || !isFinite(b) || (a <= 0 && b <= 0)) return "";
+  var c = ((pin || 0) * a + (pout || 0) * b) / 1000000;
+  if (!(c > 0)) return "";
+  return " ≈¥" + (c < 0.1 ? c.toFixed(3) : c.toFixed(2));
+}
+
+function usageText(w) {
+  var u = (w && w.usage) || { in: 0, out: 0 };
+  if (!u.in && !u.out) return "";
+  return "累计 " + fmtNum(u.in) + " 入 / " + fmtNum(u.out) + " 出 tokens" + costOf(u.in, u.out);
+}
+
+function recordUsage(w, sysText, hist, raw) {
+  var u = llmLastUsage;
+  llmLastUsage = null;
+  var pin = 0, pout = 0;
+  if (u && (u.prompt_tokens || u.completion_tokens)) {
+    pin = Number(u.prompt_tokens) || 0;
+    pout = Number(u.completion_tokens) || 0;
+  } else {
+    var ask = sysText + "\n" + hist.map(function (m) { return m.content; }).join("\n");
+    pin = estTokens(ask);
+    pout = estTokens(raw);
+  }
+  w.usage = w.usage || { in: 0, out: 0 };
+  w.usage.in += pin;
+  w.usage.out += pout;
+  updateMode();
+  return { pin: pin, pout: pout, source: (u && u.prompt_tokens) ? "api" : "est" };
+}
+
+function updateMode() {
+  var w = current();
+  var line = cfg.model ? "模型 · " + cfg.model : "未配置模型 · 点 ⚙ 设置";
+  var u = w ? usageText(w) : "";
+  if (u) line += "　·　" + u;
+  $("p-mode").textContent = line;
+}
+
+/* ================= 回合 ================= */
+function cut(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s; }
+
+function cardBlock(p, ctx) {
+  ctx = String(ctx || "");
+  var out = [];
+  var chars = (p.characters || []).filter(function (c) { return c.active; }).slice(0, 8);
+  if (chars.length) {
+    out.push("【人物卡 · 高于即兴发挥，名字与设定不得改动】");
+    chars.forEach(function (c) {
+      var bits = [c.name];
+      if (c.role) bits.push("身份:" + cut(c.role, 40));
+      if (c.look) bits.push("外貌:" + cut(c.look, 60));
+      if (c.persona) bits.push("性格:" + cut(c.persona, 50));
+      if (c.voice) bits.push("口吻:" + cut(c.voice, 50));
+      if (c.want) bits.push("想要:" + cut(c.want, 50));
+      if (c.relation) bits.push("关系:" + cut(c.relation, 40));
+      if (c.secret) bits.push("秘密(勿直接说破):" + cut(c.secret, 50));
+      out.push("· " + bits.join("｜"));
+    });
+  }
+  var sets = (p.settings || []).filter(function (s) {
+    if (!s.active) return false;
+    var keys = String(s.keys || "").split(/[,，、;；\s]+/).filter(Boolean);
+    if (!keys.length) return true;              // 没写触发词：启用就注入
+    for (var i = 0; i < keys.length; i++) {
+      if (ctx.indexOf(keys[i]) >= 0) return true; // 命中触发词：自动注入
+    }
+    return false;
+  }).slice(0, 8);
+  if (sets.length) {
+    out.push("【设定卡 · 关键词命中自动注入】");
+    sets.forEach(function (s) {
+      out.push("· " + s.name + "（" + s.type + "）：" + cut(s.detail, 100));
+    });
+  }
+  return out.join("\n");
+}
+
+/* ================= 导演：NPC 自主 + 随机事件 ================= */
+function heroName(p) {
+  var n = String((p && p.npc) || "").split(/[（(]/)[0].trim();
+  return n || "主角";
+}
+
+function actorStore(w) {
+  if (!w.actors || typeof w.actors !== "object") w.actors = {};
+  return w.actors;
+}
+
+/* 加权抽人：欲望强、久未开口、正处在激烈情绪里的更容易主动 */
+function rollActor(w) {
+  var hero = heroName(w.pack);
+  var pool = (w.pack.characters || []).filter(function (c) {
+    return c && c.active && c.name && c.name !== hero && c.name !== "系统";
+  });
+  if (!pool.length) return null;
+
+  var st = actorStore(w);
+  var weights = pool.map(function (c) {
+    var wgt = Math.max(1, Number(c.heat) || 3);
+    if (c.want) wgt *= 2;
+    var s = st[c.name] || {};
+    if (typeof s.lastTurn === "number" && w.turns - s.lastTurn < 3) wgt *= 0.2;
+    if ((s.mood || c.mood) && /[怒急恨疯杀]/.test(s.mood || c.mood)) wgt *= 2.5;
+    return wgt;
+  });
+
+  var sum = weights.reduce(function (a, b) { return a + b; }, 0);
+  var r = Math.random() * sum;
+  var pick = pool[pool.length - 1];
+  for (var i = 0; i < pool.length; i++) {
+    r -= weights[i];
+    if (r <= 0) { pick = pool[i]; break; }
+  }
+  st[pick.name] = st[pick.name] || {};
+  st[pick.name].lastTurn = w.turns;
+  return pick;
+}
+
+function pickEvent(w) {
+  var evs = (w.pack.events || []).filter(function (e) { return e && !e.used && e.text; });
+  if (!evs.length) return null;
+  var e = evs[Math.floor(Math.random() * evs.length)];
+  e.used = true;
+  return e;
+}
+
+function directorBlock(w) {
+  var d = w.pack.director || {};
+  if (d.on === false) return "";
+  var out = [];
+
+  var every = Number(d.every); if (!isFinite(every)) every = 2;
+  if (every > 0 && w.turns > 0 && w.turns % every === 0) {
+    var a = rollActor(w);
+    if (a) {
+      var st = (w.actors || {})[a.name] || {};
+      var L = ["【导演 · NPC 自主行动】这一轮由「" + a.name + "」先动，不要等玩家去搭话。"];
+      if (a.role) L.push("身份：" + cut(a.role, 30));
+      if (a.want) L.push("欲望：" + cut(a.want, 40));
+      if (a.secret) L.push("瞒着：" + cut(a.secret, 40));
+      if (st.mood || a.mood) L.push("情绪：" + (st.mood || a.mood));
+      L.push("让他自己出手、自己开口，口吻按人物卡；不得替玩家做决定，也不得让他知道玩家私下的秘密。");
+      out.push(L.join("\n"));
+      w.directorLog = (w.directorLog || []).concat([{ turn: w.turns, actor: a.name }]).slice(-12);
+    }
+  }
+
+  var evEvery = Number(d.evEvery); if (!isFinite(evEvery)) evEvery = 5;
+  if (evEvery > 0 && w.turns > 0 && w.turns % evEvery === 0) {
+    var ev = pickEvent(w);
+    if (ev) {
+      out.push("【导演 · 随机事件（可用可不用，不合情境就自然略过）】\n" +
+        (ev.cond ? "前提：" + ev.cond + "\n" : "") + ev.text);
+    }
+  }
+  return out.join("\n\n");
+}
+
+/* 篇幅档位：0/1 短、2 中、3 长、4 很长 */
+function lengthRule() {
+  var n = Number(cfg.len) || 2;
+  if (n >= 4) {
+    return "承接玩家的动作往下写 1200-1600 字，分成 6-8 段，每段 150-250 字。必须有：一整段对白交锋、一段环境或身体感受的特写、一次小的局势变化。结尾停在一个没做完的动作或一句没说完的话上，不要总结。";
+  }
+  if (n === 3) {
+    return "承接玩家的动作往下写 700-1000 字，分成 4-6 段，每段 150-200 字。至少包含一段对白，和一处具体到声音、气味或触感的细节。不要用总结句收尾。";
+  }
+  if (n <= 1) {
+    return "承接玩家这一轮动作，写 200-350 字，2-3 段，具体、有感官细节，不跳场景。";
+  }
+  return "承接玩家这一轮动作，写 400-600 字，3-4 段，每段 120-180 字，至少有一句对白。";
+}
+
+function buildSystem(w) {
+  var st = w.pack.stats.map(function (s) {
+    return s.label + " " + (w.state[s.key] || 0) + "/" + (s.max || 100);
+  }).join("，");
+
+  // 触发词命中的上下文：最近 6 条 + 本轮输入
+  var ctx = w.log.slice(-6).map(function (e) { return e.text || ""; }).join("\n");
+  var facts = (w.facts || []).filter(Boolean).slice(-10);
+
+  var p = w.pack;
+  return [
+    "你是一部互动小说的叙事引擎，用第二人称现在时续写，主角是「你」。",
+    "作品：" + p.title + "（" + p.genre + "）",
+    p.premise ? "主线：" + p.premise : "",
+    p.world ? "世界观：" + p.world : "",
+    cardBlock(p, ctx),
+    "文风：" + p.style,
+    p.rules.length ? "世界规则：" + p.rules.join("；") : "",
+    p.hooks.length ? "可用冲突：" + p.hooks.join("；") : "",
+    "当前状态：" + st,
+    directorBlock(w),
+    w.summary ? "前情提要：" + w.summary : "",
+    facts.length ? "已发生的事实（必须遵守，不要遗忘，也不要重复叙述）：\n" + facts.map(function (f) { return "· " + cut(f, 60); }).join("\n") : "",
+    "写作要求：",
+    "· " + lengthRule() + " 不替玩家做决定，不跳场景，不写「你感到」「这一刻」这类空转句。",
+    "· 篇幅不够时，用动作、对白、环境来填充，禁止用解释和总结凑字数。",
+    p.rating === "explicit"
+      ? "· 成年角色之间的亲密与性描写要直接、具体，不省略、不淡出、不用比喻遮掩。"
+      : (p.rating === "sensual"
+        ? "· 亲密场面写到暧昧与身体反应为止，不进入露骨描写。"
+        : "· 保持全年龄，不写性内容。"),
+    "· 若玩家的动作导致状态变化，给出 delta；没有变化就给空对象。单项单轮涨幅不超过该属性上限的 20%，境界一次只升一级；受伤可以掉得更多。",
+    "· 三个选项要彼此不同路：一个推进、一个试探、一个反向或撤退。",
+    "· 正文写多长都可以，但 <<<META 块必须出现在全部正文之后，不能被截断。",
+    "输出格式：先写剧情正文（纯叙述，不要 JSON、不要代码块）；空一行后另起一行，输出元信息块：",
+    "<<<META",
+    "{\"choices\":[\"选项一\",\"选项二\",\"选项三\"],\"delta\":{\"" + w.pack.stats[0].key + "\":0}," +
+      "\"quest\":{\"goal\":\"当前目标，12字内\",\"need\":\"还差什么，12字内\",\"risk\":\"最紧迫的威胁，14字内\"}," +
+      "\"cast\":[{\"name\":\"人物名\",\"attitude\":\"敌对|中立|友善\",\"mood\":\"情绪，6字内\",\"state\":\"此刻的身体与动作，20字内\"}]}",
+    "META>>>",
+    "· quest 与 cast 每轮都要给，不能省略。cast 只列本轮真正出场的角色，最多 4 个；没出场的人不要写进来。",
+    "· attitude 只能填「敌对」「中立」「友善」三者之一；state 写肉眼可见的东西（伤口、姿势、手上的动作），不要写心理活动。"
+  ].filter(Boolean).join("\n");
+}
+
+function buildHistory(w) {
+  var msgs = [];
+  var recent = w.log.slice(-14);
+  recent.forEach(function (e) {
+    if (e.role === "you") msgs.push({ role: "user", content: e.text });
+    else if (e.role === "narr") msgs.push({ role: "assistant", content: e.text });
+  });
+  return msgs;
+}
+
+
+/* ================= 每轮状态栏：任务 + 出场人物 ================= */
+function castNode(quest, cast) {
+  var wrap = document.createElement("div");
+  wrap.className = "castpanel";
+
+  function mk(tag, cls, txt) {
+    var el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (txt != null) el.textContent = txt;
+    return el;
+  }
+
+  if (quest && (quest.goal || quest.need || quest.risk)) {
+    var q = mk("div", "quest");
+    if (quest.goal) {
+      q.appendChild(mk("span", "lab", "任务"));
+      q.appendChild(mk("b", null, quest.goal));
+    }
+    if (quest.need) {
+      q.appendChild(mk("span", "lab", "还差"));
+      q.appendChild(mk("span", null, quest.need));
+    }
+    if (quest.risk) {
+      q.appendChild(mk("span", "lab", "威胁"));
+      q.appendChild(mk("span", "risk", quest.risk));
+    }
+    wrap.appendChild(q);
+  }
+
+  var list = (cast || []).filter(function (c) { return c && c.name; }).slice(0, 4);
+  if (list.length) {
+    var box = mk("div", "who");
+    list.forEach(function (c) {
+      var at = String(c.attitude || "中立");
+      var cls = at.indexOf("敌") >= 0 ? "hostile" : (at.indexOf("友") >= 0 ? "friend" : "neutral");
+      var cell = mk("div", "c " + cls);
+      var head = mk("div", "head");
+      head.appendChild(mk("span", "nm", c.name));
+      head.appendChild(mk("span", "at", at + (c.mood ? " · " + c.mood : "")));
+      cell.appendChild(head);
+      if (c.state) cell.appendChild(mk("div", "st", c.state));
+      box.appendChild(cell);
+    });
+    wrap.appendChild(box);
+  }
+  return wrap;
+}
+
+function appendCast(quest, cast) {
+  var node = castNode(quest, cast);
+  if (!node.childNodes.length) return;
+  $("p-log").appendChild(node);
+  scrollLog(true);
+}
+
+/* ================= 快照（回退 / 重掷） ================= */
+/* 数值护栏：单轮单属性涨幅不超过上限的 20%，境界一次只升一级 */
+function guardDelta(s, v) {
+  var mx = s.max || 100;
+  var cap = Math.max(1, Math.round(mx * 0.2));
+  if (s.key === "realm") cap = 1;
+  if (v > cap) v = cap;
+  if (v < -cap * 2) v = -cap * 2;
+  return v;
+}
+
+function pushSnap(w, input) {
+  w.snaps = w.snaps || [];
+  w.pending = null;
+  w.snaps.push({
+    state: JSON.parse(JSON.stringify(w.state || {})),
+    facts: (w.facts || []).slice(),
+    actors: JSON.parse(JSON.stringify(w.actors || {})),
+    eventsUsed: (w.pack.events || []).map(function (e) { return !!e.used; }),
+    logLen: w.log.length,
+    summary: w.summary || "",
+    choices: (w.choices || []).slice(),
+    turns: w.turns || 0,
+    input: input || "",
+    at: Date.now()
+  });
+  if (w.snaps.length > 40) w.snaps.shift();
+}
+
+function rewind(w) {
+  if (!w.snaps || !w.snaps.length) return null;
+  var s = w.snaps.pop();
+  w.pending = s;                       // 留着给「重掷」用
+  w.state = JSON.parse(JSON.stringify(s.state));
+  w.facts = (s.facts || []).slice();
+  w.actors = JSON.parse(JSON.stringify(s.actors || {}));
+  if (Array.isArray(s.eventsUsed)) {
+    (w.pack.events || []).forEach(function (e, i) { e.used = !!s.eventsUsed[i]; });
+  }
+  w.log = w.log.slice(0, s.logLen);
+  w.summary = s.summary;
+  w.choices = s.choices.slice();
+  w.turns = s.turns;
+  w.updated = Date.now();
+  renderStats();
+  renderLog();
+  renderChoices();
+  saveWorks();
+  return s;
+}
+
+function paintNarr(el, text) {
+  el.innerHTML = "";
+  var ps = String(text || "").split("\n\n");
+  for (var i = 0; i < ps.length; i++) {
+    if (!ps[i]) continue;
+    var p = document.createElement("p");
+    p.textContent = ps[i];
+    el.appendChild(p);
+  }
+  scrollLog(false);
+}
+
+function submit(text) {
+  if (busy) return;
+  var w = current(); if (!w) return;
+  text = (text || "").trim();
+  if (!text) return;
+
+  busy = true;
+  $("p-send").disabled = true;
+  $("p-input").value = "";
+  renderChoices();
+
+  var hist = buildHistory(w);           // 先取历史，避免重复当前输入
+  pushSnap(w, text);
+  w.log.push({ role: "you", text: text });
+  appendMsg("you", text);
+
+  var live = document.createElement("div");
+  live.className = "msg narr streaming";
+  $("p-log").appendChild(live);
+  paintNarr(live, "");
+  scrollLog(true);
+
+  var sysText = buildSystem(w);
+  llmLastUsage = null;
+  var msgs = [{ role: "system", content: sysText }]
+    .concat(hist)
+    .concat([{ role: "user", content: "【玩家行动】" + text + "\n请续写并给出三个选项。" }]);
+
+  var lastPaint = 0;
+  function onDelta(all) {
+    var cut = all.indexOf("<<<META");
+    var bodyText = cut >= 0 ? all.slice(0, cut) : all;
+    var now = Date.now();
+    if (now - lastPaint < 70) return;   // 节流，别每字重排
+    lastPaint = now;
+    paintNarr(live, bodyText);
+  }
+
+  llm(msgs, { temp: cfg.temp || 0.9, timeout: 180000, onDelta: onDelta })
+    .then(function (raw) {
+      var t = parseTurn(raw);
+      var narr = t.narration || "（模型没有返回正文）";
+      var used = recordUsage(w, sysText, hist, raw);
+
+      live.className = "msg narr";
+      paintNarr(live, narr);
+
+      var delta = {};
+      if (t.delta) {
+        w.pack.stats.forEach(function (s) {
+          var v = Number(t.delta[s.key]);
+          if (isFinite(v) && v !== 0) {
+            v = guardDelta(s, v);
+            var before = w.state[s.key] || 0;
+            w.state[s.key] = clamp(before + v, s.max);
+            if (w.state[s.key] !== before) delta[s.label] = w.state[s.key] - before;
+          }
+        });
+      }
+
+      w.log.push({ role: "narr", text: narr });
+
+      if (raw.indexOf("<<<META") < 0 && raw.length > 400) {
+        appendMsg("delta", "⚠ 这一轮没收到 META 块（多半被 max_tokens 截断了），选项与数值未结算。去 ⚙ 把「最大输出 tokens」调大。");
+      }
+
+      var bits = Object.keys(delta).map(function (k) {
+        return k + (delta[k] > 0 ? "+" : "") + delta[k];
+      });
+      if (bits.length) {
+        var line = bits.join("　");
+        w.log.push({ role: "delta", text: line });
+        appendMsg("delta", line);
+      }
+
+      if ((t.quest && (t.quest.goal || t.quest.risk)) || (t.cast && t.cast.length)) {
+        w.log.push({ role: "cast", text: JSON.stringify({ quest: t.quest, cast: t.cast }) });
+        appendCast(t.quest, t.cast);
+      }
+
+      if (used && (used.pin || used.pout)) {
+        var uline = "本轮 " + fmtNum(used.pin + used.pout) + " tokens（入 " + fmtNum(used.pin) +
+          " / 出 " + fmtNum(used.pout) + "）" + costOf(used.pin, used.pout) +
+          (used.source === "est" ? " · 估算" : "");
+        w.log.push({ role: "usage", text: uline });
+        appendMsg("usage", uline);
+      }
+
+      w.choices = t.choices.length ? t.choices : ["继续", "观察四周", "退后一步"];
+      w.turns++;
+      w.updated = Date.now();
+      renderStats();
+      renderChoices();
+      saveWorks();
+      compactMemory(w);
+    })
+    .catch(function (err) {
+      live.className = "msg err";
+      var msg = err && err.name === "AbortError" ? "请求超时（3 分钟）。" : (err && err.message ? err.message : String(err));
+      live.textContent = "生成失败：" + msg + "\n检查 ⚙ 里的接口地址、模型名和 Key。可用「重掷上一段」再试一次。";
+    })
+    .then(function () {
+      busy = false;
+      $("p-send").disabled = false;
+      renderChoices();
+      scrollLog(true);
+      $("p-input").focus();
+    });
+}
+
+function undoRound() {
+  var w = current(); if (!w || busy) return;
+  if (!w.snaps || !w.snaps.length) { toast("已经到最开始了"); return; }
+  rewind(w);
+  closeModal("m-menu");
+  toast("退回上一轮");
+}
+
+function redrawRound() {
+  var w = current(); if (!w || busy) return;
+  var s = w.pending || (w.snaps && w.snaps.length ? w.snaps[w.snaps.length - 1] : null);
+  if (!s || !s.input) { toast("没有可重掷的回合"); return; }
+  if (!w.pending) rewind(w);           // 没回退过，先退再发
+  w.pending = null;
+  closeModal("m-menu");
+  submit(s.input);
+}
+
+function compactMemory(w) {
+  if (w.turns % 6 !== 0) return;
+  var recent = w.log.slice(-18).map(function (e) {
+    return (e.role === "you" ? "玩家：" : "") + e.text;
+  }).join("\n").slice(0, 4000);
+
+  llm([
+    {
+      role: "system",
+      content: "你是剧情记忆整理器。只输出 JSON：{\"summary\":\"120 字以内的前情提要\",\"facts\":[\"关键事实\"]}。" +
+        "facts 记录：得到或失去的东西、结下的仇与欠下的债、到过的地方、当前目标与承诺。每条 20 字以内，最多 10 条。" +
+        "旧的 facts 若仍然有效必须保留，已经了结的删掉。不要写空话。"
+    },
+    {
+      role: "user",
+      content: (w.summary ? "已有提要：" + w.summary + "\n" : "") +
+        ((w.facts && w.facts.length) ? "已有要点：\n" + w.facts.join("\n") + "\n" : "") +
+        "最近片段：\n" + recent
+    }
+  ], { temp: 0.3, timeout: 60000 }).then(function (raw) {
+    var d = null;
+    try { d = parseJSON(raw); } catch (e) { d = null; }
+    if (!d) return;
+    if (d.summary) w.summary = String(d.summary).slice(0, 400);
+    if (Array.isArray(d.facts)) w.facts = d.facts.slice(0, 10).map(String);
+    saveWorks();
+  }).catch(function () {});
+}
+
+/* ================= 导入 ================= */
+function readFileSmart(file, cb) {
+  var fr = new FileReader();
+  fr.onload = function () {
+    var buf = fr.result;
+    var t = "";
+    try { t = new TextDecoder("utf-8").decode(buf); } catch (e) { t = ""; }
+    var bad = (t.match(/\uFFFD/g) || []).length;
+    if (!t || bad > t.length * 0.01) {
+      try { t = new TextDecoder("gbk").decode(buf); } catch (e2) {}
+    }
+    cb(t);
+  };
+  fr.readAsArrayBuffer(file);
+}
+
+function sampleText(t) {
+  t = String(t).replace(/\r/g, "").replace(/\uFEFF/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  if (t.length <= 12000) return t;
+  var head = t.slice(0, 6000);
+  var mid = t.slice(Math.floor(t.length / 2), Math.floor(t.length / 2) + 2500);
+  var tail = t.slice(-2500);
+  return head + "\n\n……（中段节选）……\n\n" + mid + "\n\n……（结尾节选）……\n\n" + tail;
+}
+
+function importGo(text) {
+  var title = $("imp-title").value.trim();
+  if (!text || text.length < 200) { toast("正文太短，至少贴几百字"); return; }
+  closeModal("m-import");
+  openWorkLoading("正在读文本并抽取剧情卡…");
+
+  var sys = [
+    "你是小说改编引擎。读入小说片段，产出一张可以运行的互动小说剧情卡。",
+    "要求：忠实保留原作的人物、世界观、语气与关键冲突；把叙事改成第二人称「你」。",
+    "人物卡 3-6 张，覆盖主角与主要对手；设定卡 3-6 张，覆盖关键地点、势力、物品或规则。",
+    "只输出 JSON，不要代码块，字段如下：",
+    '{"title":"作品名","subtitle":"一句副标题","genre":"题材","premise":"两句话主线","world":"世界观，150字内","style":"文风要求，一句话","rating":"explicit","npc":"主要互动角色名","pronoun":"他/她","place":"开场地点","stats":[{"key":"heat","label":"中文名","start":20},{"key":"bond","label":"中文名","start":0},{"key":"will","label":"中文名","start":40}],"opening":["第二人称开场段落1","段落2","段落3","段落4"],"hooks":["可触发的冲突"],"rules":["世界规则"],"characters":[{"name":"角色名","role":"身份","relation":"与主角的关系","look":"外貌","persona":"性格","voice":"口吻与口癖","want":"想要什么","secret":"秘密"}],"settings":[{"name":"名称","type":"地点/势力/规则/物品","keys":"触发词,逗号分隔","detail":"细节"}]}'
+  ].join("\n");
+
+  llm([
+    { role: "system", content: sys },
+    { role: "user", content: "小说原文（可能有删节）：\n\n" + sampleText(text) }
+  ], { temp: 0.7, timeout: 150000 })
+    .then(function (raw) {
+      var pack = normalizePack(parseJSON(raw), title);
+      if (title) pack.title = title;
+      closeLoading();
+      var w = createWork(pack);
+      renderShelf();
+      openWork(w.id);
+      toast("剧情卡已生成");
+    })
+    .catch(function (e) {
+      closeLoading();
+      toast("生成失败：" + (e.message || e));
+    });
+}
+
+/* ================= 从零生成 ================= */
+function genGo() {
+  var idea = $("gen-idea").value.trim();
+  if (!idea) { toast("先写一句设定"); return; }
+  var genre = $("gen-genre").value;
+  var rating = $("gen-rating").value;
+  closeModal("m-gen");
+  openWorkLoading("正在搭建世界…");
+
+  var sys = [
+    "你是互动小说设定师。根据用户的一句话设定，产出一张原创剧情卡。",
+    "尺度：" + (rating === "explicit" ? "成人向，亲密场面直接露骨" : rating === "sensual" ? "暧昧向" : "全年龄"),
+    "题材：" + genre,
+    "人物卡 3-6 张；设定卡 3-6 张。",
+    "只输出 JSON，不要代码块，字段：",
+    '{"title":"作品名","subtitle":"副标题","genre":"' + genre + '","premise":"两句主线","world":"世界观150字","style":"文风一句话","rating":"' + rating + '","npc":"主要互动角色","pronoun":"他/她","place":"开场地点","stats":[{"key":"heat","label":"中文","start":20},{"key":"bond","label":"中文","start":0},{"key":"will","label":"中文","start":40}],"opening":["第二人称开场段落1","2","3","4"],"hooks":["冲突1","2","3","4"],"rules":["规则1","2","3"],"characters":[{"name":"角色名","role":"身份","relation":"与主角的关系","look":"外貌","persona":"性格","voice":"口吻与口癖","want":"想要什么","secret":"秘密"}],"settings":[{"name":"名称","type":"地点/势力/规则/物品","keys":"触发词,逗号分隔","detail":"细节"}]}'
+  ].join("\n");
+
+  llm([
+    { role: "system", content: sys },
+    { role: "user", content: "设定：" + idea }
+  ], { temp: 0.95, timeout: 120000 })
+    .then(function (raw) {
+      var pack = normalizePack(parseJSON(raw), "未命名作品");
+      closeLoading();
+      var w = createWork(pack);
+      renderShelf();
+      openWork(w.id);
+      toast("世界已生成");
+    })
+    .catch(function (e) {
+      closeLoading();
+      toast("生成失败：" + (e.message || e));
+    });
+}
+
+/* ================= 加载遮罩 ================= */
+var loadingEl = null;
+function openWorkLoading(msg) {
+  $("shelf").hidden = true;
+  $("play").hidden = false;
+  $("p-title").textContent = "生成中";
+  $("p-sub").textContent = msg;
+  $("p-stats").innerHTML = "";
+  $("p-choices").innerHTML = "";
+  $("p-send").disabled = true;
+  $("p-input").disabled = true;
+  var log = $("p-log");
+  log.innerHTML = "";
+  var d = document.createElement("div");
+  d.className = "msg thinking";
+  d.innerHTML = '模型正在工作，可能要十几秒<span class="dots"><i></i><i></i><i></i></span>';
+  log.appendChild(d);
+  loadingEl = d;
+}
+function closeLoading() {
+  if (loadingEl && loadingEl.parentNode) loadingEl.remove();
+  loadingEl = null;
+  $("play").hidden = true;
+  $("shelf").hidden = false;
+}
+
+/* ================= 卡片库 ================= */
+var cardsTab = "char";
+
+function ensureCards(w) {
+  if (!Array.isArray(w.pack.characters)) w.pack.characters = [];
+  if (!Array.isArray(w.pack.settings)) w.pack.settings = [];
+  if (!Array.isArray(w.pack.events)) w.pack.events = [];
+  if (!w.pack.events.length) {
+    for (var k = 0; k < SEEDS.length; k++) {
+      if (SEEDS[k].title === w.pack.title && Array.isArray(SEEDS[k].events)) {
+        w.pack.events = SEEDS[k].events.map(normEvent);
+        break;
+      }
+    }
+  }
+  if (!w.pack.director) w.pack.director = { on: true, every: 2, evEvery: 5 };
+  if (!w.actors || typeof w.actors !== "object") w.actors = {};
+  if (!Array.isArray(w.facts)) w.facts = [];
+  (w.pack.settings || []).forEach(function (s) {
+    if (typeof s.keys !== "string") s.keys = "";
+    if (!s.keys) {
+      for (var i = 0; i < GUI_SETTINGS.length; i++) {
+        if (GUI_SETTINGS[i].name === s.name) { s.keys = GUI_SETTINGS[i].keys; break; }
+      }
+    }
+  });
+}
+
+function escHTML(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+var CHAR_FIELDS = [
+  ["name", "名字", "input"],
+  ["role", "身份", "input"],
+  ["relation", "与主角的关系", "input"],
+  ["look", "外貌", "textarea"],
+  ["persona", "性格", "textarea"],
+  ["voice", "口吻与口癖", "textarea"],
+  ["want", "想要什么（写具体，别写「想变强」）", "textarea"],
+  ["secret", "秘密（模型知道但不会直说）", "textarea"],
+  ["heat", "主动性 1-5（越高越容易自己出手）", "input"],
+  ["mood", "当前情绪（可空）", "input"]
+];
+var SET_FIELDS = [
+  ["name", "名称", "input"],
+  ["type", "类型（地点 / 势力 / 规则 / 物品）", "input"],
+  ["keys", "触发词（逗号分隔，文中出现就自动注入；留空＝启用即注入）", "input"],
+  ["detail", "细节", "textarea"]
+];
+
+function cardHTML(kind, c, i) {
+  var fields = kind === "char" ? CHAR_FIELDS : SET_FIELDS;
+  var body = fields.map(function (f) {
+    var val = escHTML(c[f[0]]);
+    var el = f[2] === "textarea"
+      ? '<textarea data-i="' + i + '" data-f="' + f[0] + '" style="height:58px">' + val + "</textarea>"
+      : '<input data-i="' + i + '" data-f="' + f[0] + '" value="' + val + '">';
+    return '<div class="field"><label>' + f[1] + "</label>" + el + "</div>";
+  }).join("");
+
+  var sub = kind === "char"
+    ? ((c.role || "") + (c.relation ? " · " + c.relation : ""))
+    : (c.type || "");
+
+  return '<details class="ck' + (c.active ? "" : " off") + '">' +
+    "<summary><b>" + escHTML(c.name) + "</b><span>" + escHTML(sub) + "</span></summary>" +
+    '<div class="ck-body">' + body +
+      '<div class="ck-acts">' +
+        '<button class="ck-toggle" data-i="' + i + '">' + (c.active ? "停用" : "启用") + "</button>" +
+        '<button class="ck-del del" data-i="' + i + '">删除</button>' +
+      "</div></div></details>";
+}
+
+function renderCards() {
+  var w = current(); if (!w) return;
+  ensureCards(w);
+  $("tab-char").classList.toggle("on", cardsTab === "char");
+  $("tab-set").classList.toggle("on", cardsTab === "set");
+
+  var arr = cardsTab === "char" ? w.pack.characters : w.pack.settings;
+  var box = $("card-list");
+  if (!arr.length) {
+    box.innerHTML = '<p class="empty" style="padding:24px 0">还没有卡片。点下面「新增」，或者让模型补几张。</p>';
+    return;
+  }
+  box.innerHTML = arr.map(function (c, i) { return cardHTML(cardsTab, c, i); }).join("");
+}
+
+function openCards(tab) {
+  var w = current(); if (!w) return;
+  ensureCards(w);
+  cardsTab = tab || "char";
+  closeModal("m-menu");
+  renderCards();
+  openModal("m-cards");
+}
+
+/* ================= 导演面板 ================= */
+function openDirector() {
+  var w = current(); if (!w) return;
+  ensureCards(w);
+  closeModal("m-menu");
+  var d = w.pack.director;
+  $("dir-on").checked = d.on !== false;
+  $("dir-every").value = d.every;
+  $("dir-ev").value = d.evEvery;
+  renderEvents();
+  openModal("m-dir");
+}
+
+function renderEvents() {
+  var w = current(); if (!w) return;
+  ensureCards(w);
+  var evs = w.pack.events;
+  var box = $("ev-list");
+  if (!evs.length) {
+    box.innerHTML = '<p class="empty" style="padding:14px 0">还没有事件。点下面新增，或让模型生成。</p>';
+    return;
+  }
+  box.innerHTML = evs.map(function (e, i) {
+    return '<details class="ck' + (e.used ? " off" : "") + '">' +
+      "<summary><b>" + escHTML(e.title) + "</b><span>" + (e.used ? "已触发" : "待触发") + "</span></summary>" +
+      '<div class="ck-body">' +
+      '<div class="field"><label>标题</label><input data-ei="' + i + '" data-ef="title" value="' + escHTML(e.title) + '"></div>' +
+      '<div class="field"><label>前提（可空，模型据此判断合不合情境）</label><input data-ei="' + i + '" data-ef="cond" value="' + escHTML(e.cond) + '"></div>' +
+      '<div class="field"><label>发生什么</label><textarea data-ei="' + i + '" data-ef="text" style="height:64px">' + escHTML(e.text) + "</textarea></div>" +
+      '<div class="ck-acts">' +
+      '<button class="ev-reset" data-ei="' + i + '">重置为未触发</button>' +
+      '<button class="ev-del del" data-ei="' + i + '">删除</button>' +
+      "</div></div></details>";
+  }).join("");
+}
+
+/* ================= 事件绑定 ================= */
+$("btn-import").onclick = function () { openModal("m-import"); };
+$("btn-gen").onclick = function () { openModal("m-gen"); };
+$("btn-set").onclick = function () {
+  $("s-base").value = cfg.base || "";
+  $("s-model").value = cfg.model || "";
+  $("s-key").value = cfg.key || "";
+  $("s-temp").value = cfg.temp || 0.9;
+  $("s-len").value = String(cfg.len || 2);
+  $("s-maxtok").value = cfg.maxTok || 2048;
+  $("s-fs").value = String(cfg.fs || 16);
+  $("s-pricein").value = cfg.priceIn == null ? 2 : cfg.priceIn;
+  $("s-priceout").value = cfg.priceOut == null ? 8 : cfg.priceOut;
+  openModal("m-set");
+};
+$("s-cancel").onclick = function () { closeModal("m-set"); };
+$("s-save").onclick = function () {
+  cfg.base = $("s-base").value.trim();
+  cfg.model = $("s-model").value.trim();
+  cfg.key = $("s-key").value.trim();
+  cfg.temp = parseFloat($("s-temp").value) || 0.9;
+  cfg.len = parseInt($("s-len").value, 10) || 2;
+  cfg.maxTok = Math.max(256, Math.min(8192, parseInt($("s-maxtok").value, 10) || 2048));
+  cfg.fs = parseInt($("s-fs").value, 10) || 16;
+  cfg.priceIn = Math.max(0, parseFloat($("s-pricein").value) || 0);
+  cfg.priceOut = Math.max(0, parseFloat($("s-priceout").value) || 0);
+  applyFont();
+  updateMode();
+  saveCfg();
+  closeModal("m-set");
+  updateMode();
+  toast("已保存");
+};
+$("s-test").onclick = function () {
+  var bak = { base: cfg.base, model: cfg.model, key: cfg.key };
+  cfg.base = $("s-base").value.trim();
+  cfg.model = $("s-model").value.trim();
+  cfg.key = $("s-key").value.trim();
+  toast("测试中…");
+  llm([{ role: "user", content: "回复两个字：通了" }], { temp: 0, timeout: 30000 })
+    .then(function (t) { toast("连接正常：" + String(t).slice(0, 12)); })
+    .catch(function (e) { toast("失败：" + (e.message || e).slice(0, 60)); })
+    .then(function () { cfg.base = bak.base; cfg.model = bak.model; cfg.key = bak.key; });
+};
+
+/* 导入弹窗 */
+$("drop").onclick = function () { $("file").click(); };
+$("file").onchange = function (ev) {
+  var f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  readFileSmart(f, function (text) {
+    $("imp-text").value = String(text).slice(0, 400000);
+    if (!$("imp-title").value) $("imp-title").value = f.name.replace(/\.[^.]+$/, "");
+    toast("已读入 " + f.name);
+  });
+};
+["dragover", "dragenter"].forEach(function (ev) {
+  $("drop").addEventListener(ev, function (e) { e.preventDefault(); $("drop").classList.add("over"); });
+});
+["dragleave", "drop"].forEach(function (ev) {
+  $("drop").addEventListener(ev, function (e) { e.preventDefault(); $("drop").classList.remove("over"); });
+});
+$("drop").addEventListener("drop", function (e) {
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  readFileSmart(f, function (text) {
+    $("imp-text").value = String(text).slice(0, 400000);
+    if (!$("imp-title").value) $("imp-title").value = f.name.replace(/\.[^.]+$/, "");
+    toast("已读入 " + f.name);
+  });
+});
+$("imp-cancel").onclick = function () { closeModal("m-import"); };
+$("imp-go").onclick = function () { importGo($("imp-text").value); };
+
+/* 生成弹窗 */
+$("gen-cancel").onclick = function () { closeModal("m-gen"); };
+$("gen-go").onclick = genGo;
+
+/* 游戏页 */
+$("btn-back").onclick = backToShelf;
+$("btn-menu").onclick = function () {
+  var w = current(); if (!w) return;
+  $("menu-title").textContent = w.pack.title;
+  openModal("m-menu");
+};
+$("mm-close").onclick = function () { closeModal("m-menu"); };
+$("mm-edit").onclick = function () {
+  var w = current(); if (!w) return;
+  $("pack-json").value = JSON.stringify(w.pack, null, 2);
+  closeModal("m-menu");
+  openModal("m-pack");
+};
+$("pack-cancel").onclick = function () { closeModal("m-pack"); };
+$("pack-save").onclick = function () {
+  var w = current(); if (!w) return;
+  try {
+    var p = JSON.parse($("pack-json").value);
+    w.pack = normalizePack(p, w.pack.title);
+    w.pack.stats.forEach(function (s) {
+      if (typeof w.state[s.key] !== "number") w.state[s.key] = s.start;
+    });
+    saveWorks();
+    closeModal("m-pack");
+    renderStats();
+    renderChoices();
+    toast("剧情卡已更新");
+  } catch (e) {
+    toast("JSON 格式有误");
+  }
+};
+$("mm-undo").onclick = function () { undoRound(); };
+$("mm-redo").onclick = function () { redrawRound(); };
+
+$("mm-reopen").onclick = function () {
+  var w = current(); if (!w) return;
+  closeModal("m-menu");
+  openWorkLoading("正在重写开场…");
+  llm([
+    { role: "system", content: "你是互动小说作者。为下面这个作品写 4 段开场，第二人称，每段 60-120 字，直接进入场景，结尾留一个可行动的空隙。只输出 JSON：{\"opening\":[\"...\"]}" },
+    { role: "user", content: JSON.stringify({ title: w.pack.title, premise: w.pack.premise, world: w.pack.world, place: w.pack.place, npc: w.pack.npc, rating: w.pack.rating }) }
+  ], { temp: 0.95, timeout: 90000 }).then(function (raw) {
+    var d = parseJSON(raw);
+    if (d && Array.isArray(d.opening) && d.opening.length) {
+      w.pack.opening = d.opening;
+      w.log = [{ role: "narr", text: d.opening.join("\n\n") }];
+      w.choices = ["继续", "四处看看", "开口"];
+      w.turns = 0;
+      saveWorks();
+      closeLoading();
+      openWork(w.id);
+      toast("开场已重写");
+    } else {
+      throw new Error("返回格式不对");
+    }
+  }).catch(function (e) {
+    closeLoading();
+    toast("失败：" + (e.message || e));
+    if (curId) openWork(curId);
+  });
+};
+$("mm-exporthtml").onclick = function () {
+  var w = current(); if (!w) return;
+  download((w.pack.title || "作品") + "-阅读版.html", storyHTML(w), "text/html;charset=utf-8");
+  closeModal("m-menu");
+  toast("已导出阅读版 HTML");
+};
+
+$("mm-export").onclick = function () {
+  var w = current(); if (!w) return;
+  var p = w.pack;
+  var st = p.stats.map(function (x) { return x.label + " " + (w.state[x.key] || 0) + "/" + (x.max || 100); }).join("　·　");
+  var cast = (p.characters || []).filter(function (c) { return c.active; })
+    .map(function (c) { return "- **" + c.name + "**　" + (c.role || "") + (c.want ? "　想要：" + c.want : ""); }).join("\n");
+  var lines = [
+    "---",
+    "title: " + (p.title || ""),
+    "subtitle: " + (p.subtitle || ""),
+    "genre: " + (p.genre || ""),
+    "turns: " + (w.turns || 0),
+    "exported: " + new Date().toISOString(),
+    "---",
+    "",
+    "# " + p.title,
+    "",
+    (p.subtitle ? "> " + p.subtitle : ""),
+    "",
+    (p.premise ? "**主线**：" + p.premise : ""),
+    "",
+    (st ? "**当前状态**：" + st : ""),
+    "",
+    (cast ? "## 人物\n" + cast : ""),
+    "",
+    "---",
+    ""
+  ];
+  (w.archive || []).concat(w.log).forEach(function (e) {
+    if (e.role === "you") lines.push("**你**：" + e.text, "");
+    else if (e.role === "narr") lines.push(e.text, "");
+  });
+  var blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = w.pack.title + "-记录.md";
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 1500);
+  closeModal("m-menu");
+};
+$("mm-delete").onclick = function () {
+  var w = current(); if (!w) return;
+  if (!confirm("删除《" + w.pack.title + "》？记录不可恢复。")) return;
+  works = works.filter(function (x) { return x.id !== w.id; });
+  saveWorks();
+  closeModal("m-menu");
+  backToShelf();
+  toast("已删除");
+};
+
+/* 卡片库 */
+$("mm-chars").onclick = function () { openCards("char"); };
+$("mm-sets").onclick = function () { openCards("set"); };
+$("mm-dir").onclick = function () { openDirector(); };
+
+/* 导演设置 */
+function syncDirector() {
+  var w = current(); if (!w) return;
+  ensureCards(w);
+  w.pack.director.on = $("dir-on").checked;
+  w.pack.director.every = Math.max(0, Math.min(10, Number($("dir-every").value) || 0));
+  w.pack.director.evEvery = Math.max(0, Math.min(20, Number($("dir-ev").value) || 0));
+  saveWorks();
+}
+$("dir-on").onchange = syncDirector;
+$("dir-every").oninput = syncDirector;
+$("dir-ev").oninput = syncDirector;
+$("ev-close").onclick = function () { closeModal("m-dir"); };
+
+$("ev-list").addEventListener("input", function (e) {
+  var t = e.target;
+  var i = t.getAttribute("data-ei"), f = t.getAttribute("data-ef");
+  if (i == null || !f) return;
+  var w = current(); if (!w) return;
+  var ev = w.pack.events[+i]; if (!ev) return;
+  ev[f] = t.value;
+  saveWorks();
+});
+
+$("ev-list").addEventListener("click", function (e) {
+  var b = e.target.closest("button"); if (!b) return;
+  var w = current(); if (!w) return;
+  var i = +b.getAttribute("data-ei");
+  if (b.classList.contains("ev-del")) {
+    if (!confirm("删除这条事件？")) return;
+    w.pack.events.splice(i, 1);
+  } else if (b.classList.contains("ev-reset")) {
+    w.pack.events[i].used = false;
+  } else return;
+  saveWorks();
+  renderEvents();
+});
+
+$("ev-add").onclick = function () {
+  var w = current(); if (!w) return;
+  ensureCards(w);
+  w.pack.events.push(normEvent({ title: "新事件 " + (w.pack.events.length + 1), cond: "", text: "" }));
+  saveWorks();
+  renderEvents();
+};
+
+$("ev-ai").onclick = function () {
+  var w = current(); if (!w) return;
+  var chars = (w.pack.characters || []).filter(function (c) { return c.active; });
+  toast("正在生成事件…");
+  llm([
+    {
+      role: "system",
+      content: "你是剧情导演。为这部作品设计 6 条能随时插入的随机事件。" +
+        "每条要有：title（8 字内）、cond（前提，一句，没有就空串）、text（40-80 字，写清楚发生了什么，具体到人和动作）。" +
+        "事件要从角色的欲望与秘密里长出来，而不是天降灾难。避免与已经发生过的事重复。" +
+        "只输出 JSON：{\"events\":[{\"title\":\"\",\"cond\":\"\",\"text\":\"\"}]}"
+    },
+    {
+      role: "user",
+      content: "作品：" + w.pack.title + "\n主线：" + (w.pack.premise || "") +
+        "\n世界观：" + (w.pack.world || "").slice(0, 800) +
+        "\n地点：" + (w.pack.settings || []).map(function (s) { return s.name; }).join("、") +
+        "\n人物：" + chars.map(function (c) { return c.name + "（想：" + (c.want || "未写") + "；瞒：" + (c.secret || "未写") + "）"; }).join("；") +
+        "\n当前状态：" + w.pack.stats.map(function (s) { return s.label + " " + (w.state[s.key] || 0); }).join("，") +
+        "\n已有事件：" + (w.pack.events || []).map(function (e) { return e.title; }).join("、")
+    }
+  ], { temp: 0.95, timeout: 90000 }).then(function (raw) {
+    var d = parseJSON(raw);
+    var arr = Array.isArray(d) ? d : (d && d.events) || [];
+    var added = 0;
+    arr.forEach(function (e) {
+      if (!e || !e.text) return;
+      w.pack.events.push(normEvent(e));
+      added++;
+    });
+    saveWorks();
+    renderEvents();
+    toast(added ? "新增 " + added + " 条事件" : "没有生成内容");
+  }).catch(function (e) {
+    toast("失败：" + String(e.message || e).slice(0, 50));
+  });
+};
+$("tab-char").onclick = function () { cardsTab = "char"; renderCards(); };
+$("tab-set").onclick = function () { cardsTab = "set"; renderCards(); };
+$("card-close").onclick = function () { saveWorks(); closeModal("m-cards"); };
+
+$("card-add").onclick = function () {
+  var w = current(); if (!w) return;
+  ensureCards(w);
+  if (cardsTab === "char") w.pack.characters.push(normChar({ name: "新角色" }));
+  else w.pack.settings.push(normSetting({ name: "新设定" }));
+  saveWorks();
+  renderCards();
+};
+
+$("card-list").addEventListener("input", function (e) {
+  var w = current(); if (!w) return;
+  var t = e.target;
+  var i = Number(t.getAttribute("data-i"));
+  var f = t.getAttribute("data-f");
+  if (!f || !isFinite(i)) return;
+  var arr = cardsTab === "char" ? w.pack.characters : w.pack.settings;
+  if (!arr[i]) return;
+  arr[i][f] = t.value;
+  if (f === "name") {
+    var det = t.closest("details");
+    if (det) det.querySelector("summary b").textContent = t.value || "未命名";
+  }
+  saveWorks();
+});
+
+$("card-list").addEventListener("click", function (e) {
+  var w = current(); if (!w) return;
+  var btn = e.target.closest("button");
+  if (!btn) return;
+  var i = Number(btn.getAttribute("data-i"));
+  var arr = cardsTab === "char" ? w.pack.characters : w.pack.settings;
+  if (!arr[i]) return;
+
+  if (btn.classList.contains("ck-del")) {
+    if (!confirm("删除这张卡？")) return;
+    arr.splice(i, 1);
+    saveWorks(); renderCards();
+  } else if (btn.classList.contains("ck-toggle")) {
+    arr[i].active = !arr[i].active;
+    saveWorks(); renderCards();
+  }
+});
+
+$("card-ai").onclick = function () {
+  var w = current(); if (!w) return;
+  ensureCards(w);
+  var recent = w.log.slice(-20).map(function (e) {
+    return (e.role === "you" ? "玩家：" : "") + e.text;
+  }).join("\n").slice(0, 4000);
+
+  toast("正在补卡…");
+  llm([
+    {
+      role: "system",
+      content: "你是设定整理器。根据作品设定与对话片段，整理出场人物与关键设定。" +
+        "只输出 JSON：{\"characters\":[{\"name\":\"\",\"role\":\"\",\"relation\":\"\",\"look\":\"\",\"persona\":\"\",\"voice\":\"\",\"want\":\"\",\"secret\":\"\"}],\"settings\":[{\"name\":\"\",\"type\":\"\",\"keys\":\"触发词1,触发词2\",\"detail\":\"\"}]}。" +
+        "settings 的 keys 写 2-4 个能在文中定位到它的词（地名、势力名、物品名），逗号分隔。" +
+        "已经列出的名字不要重复；只补新出现的角色/地点，或把已有卡片补全（包括给旧设定卡补 keys）。"
+    },
+    {
+      role: "user",
+      content: "作品：" + w.pack.title + "\n主线：" + (w.pack.premise || "") + "\n世界观：" + (w.pack.world || "") +
+        "\n已有角色：" + w.pack.characters.map(function (c) { return c.name; }).join("、") +
+        "\n已有设定：" + w.pack.settings.map(function (s) { return s.name; }).join("、") +
+        "\n\n最近片段：\n" + recent
+    }
+  ], { temp: 0.6, timeout: 90000 }).then(function (raw) {
+    var d = parseJSON(raw);
+    var added = 0;
+    (d.characters || []).forEach(function (c) {
+      if (c && c.name && !w.pack.characters.some(function (x) { return x.name === c.name; })) {
+        w.pack.characters.push(normChar(c)); added++;
+      }
+    });
+    (d.settings || []).forEach(function (s) {
+      if (!s || !s.name) return;
+      var old = null;
+      w.pack.settings.forEach(function (x) { if (x.name === s.name) old = x; });
+      if (old) {
+        if (!old.keys && s.keys) { old.keys = String(s.keys); added++; }
+        return;
+      }
+      w.pack.settings.push(normSetting(s)); added++;
+    });
+    saveWorks();
+    renderCards();
+    toast(added ? "补了 " + added + " 张卡" : "没有新内容");
+  }).catch(function (e) {
+    toast("失败：" + String(e.message || e).slice(0, 50));
+  });
+};
+
+$("p-send").onclick = function () { submit($("p-input").value); };
+$("p-input").addEventListener("keydown", function (e) {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit($("p-input").value); }
+});
+
+document.querySelectorAll(".modal").forEach(function (m) {
+  m.addEventListener("click", function (e) { if (e.target === m) m.classList.remove("open"); });
+});
+
+/* ================= 启动 ================= */
+if (!localStorage.getItem("jw-seeded")) {
+  try { seedWorks(true); localStorage.setItem("jw-seeded", "1"); } catch (e) {}
+}
+applyFont();
+
+$("btn-seed").onclick = function () { seedWorks(false); };
+
+$("btn-backup").onclick = function () {
+  if (!works.length) { toast("还没有作品"); return; }
+  exportJSON(works, "小说工坊存档-" + stampNow() + ".json");
+};
+$("btn-restore").onclick = function () { $("file-json").click(); };
+$("file-json").onchange = function (e) {
+  var f = e.target.files && e.target.files[0];
+  if (f) importJSON(f);
+  e.target.value = "";
+};
+$("mm-savejson").onclick = function () {
+  var w = current(); if (!w) return;
+  exportJSON([w], (w.pack.title || "作品") + "-" + stampNow() + ".json");
+};
+renderShelf();
+updateMode();
+})();
+</script>
+</body>
+</html>
