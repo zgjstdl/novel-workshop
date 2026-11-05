@@ -88,13 +88,20 @@
   .castpanel .quest .lab{font-size:10px;letter-spacing:.16em;color:#6d6152}
   .castpanel .quest b{font-size:13.5px;font-weight:500;color:#e8cf9d;letter-spacing:.03em}
   .castpanel .quest .risk{color:#d0755e}
-  .castpanel .who{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .castpanel .who{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
   .castpanel .c{padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.028);
     border:1px solid rgba(255,255,255,.07);min-width:0}
   .castpanel .c .head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
   .castpanel .c .nm{font-size:12.5px;color:#ddcba8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .castpanel .c .at{font-size:10px;letter-spacing:.06em;white-space:nowrap;color:#7f8d99}
   .castpanel .c .st{margin-top:3px;font-size:11.5px;line-height:1.55;color:#8d8071}
+  .castpanel .c .parts{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+  .castpanel .c .pt{display:inline-flex;align-items:baseline;gap:4px;padding:2px 7px;border-radius:5px;
+    background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);
+    font-size:10.5px;line-height:1.6;color:#9a8b76}
+  .castpanel .c .pt i{font-style:normal;color:#c9b48c;letter-spacing:.04em}
+  .castpanel .c .sexlin{margin-top:6px;padding:5px 8px;border-radius:5px;font-size:10.5px;line-height:1.65;
+    color:#c99a9a;background:rgba(176,84,96,.09);border-left:2px solid rgba(200,110,120,.45)}
   .castpanel .c.hostile{border-color:rgba(224,86,47,.32);background:rgba(179,64,47,.07)}
   .castpanel .c.hostile .at{color:#e0562f}
   .castpanel .c.friend{border-color:rgba(201,162,39,.3);background:rgba(201,162,39,.06)}
@@ -1549,10 +1556,15 @@ function buildSystem(w) {
     "<<<META",
     "{\"choices\":[\"选项一\",\"选项二\",\"选项三\"],\"delta\":{\"" + w.pack.stats[0].key + "\":0}," +
       "\"quest\":{\"goal\":\"当前目标，12字内\",\"need\":\"还差什么，12字内\",\"risk\":\"最紧迫的威胁，14字内\"}," +
-      "\"cast\":[{\"name\":\"人物名\",\"attitude\":\"敌对|中立|友善\",\"mood\":\"情绪，6字内\",\"state\":\"此刻的身体与动作，20字内\"}]}",
+      "\"cast\":[{\"name\":\"人物名\",\"attitude\":\"敌对|中立|友善\",\"mood\":\"情绪，6字内\"," +
+      "\"state\":\"此刻的动作与姿态，20字内\",\"parts\":[{\"p\":\"部位\",\"s\":\"该部位的状态，10字内\"}]," +
+      "\"sex\":\"性部位与生理状态，30字内，没有就留空\"}]}",
     "META>>>",
     "· quest 与 cast 每轮都要给，不能省略。cast 只列本轮真正出场的角色，最多 4 个；没出场的人不要写进来。",
-    "· attitude 只能填「敌对」「中立」「友善」三者之一；state 写肉眼可见的东西（伤口、姿势、手上的动作），不要写心理活动。"
+    "· attitude 只能填「敌对」「中立」「友善」三者之一；state 写肉眼可见的东西（伤口、姿势、手上的动作），不要写心理活动。",
+    "· parts 只列本轮真正发生变化的部位，最多 4 个。p 用具体部位名（咽喉、肩、腕、指节、腰、腿、背、腹、膝、脚踝），s 写可见痕迹或直接触感（红肿、渗血、发抖、绷紧、发烫、湿冷、青紫），不要写「很难受」「有些累」这类笼统感受。没有变化就给空数组。",
+    "· sex 只在该角色此刻正卷入情欲场面时填写，1 到 2 句，写出生理实况（湿润、充血、肿胀、收缩、发软、酸痛、体液残留、衣物的状态），用具体词，不要用「那种感觉」「异样的刺激」这类回避说法，也不要写心理挣扎。角色不在情境中就填空字符串。",
+    "· 尺度为「全年龄」或「暗涌」时，sex 一律留空。"
   ].filter(Boolean).join("\n");
 }
 
@@ -1608,6 +1620,21 @@ function castNode(quest, cast) {
       head.appendChild(mk("span", "at", at + (c.mood ? " · " + c.mood : "")));
       cell.appendChild(head);
       if (c.state) cell.appendChild(mk("div", "st", c.state));
+
+      var parts = Array.isArray(c.parts) ? c.parts.filter(function (x) { return x && x.p; }).slice(0, 4) : [];
+      if (parts.length) {
+        var prow = mk("div", "parts");
+        parts.forEach(function (x) {
+          var tag = mk("span", "pt");
+          tag.appendChild(mk("i", null, String(x.p)));
+          tag.appendChild(document.createTextNode(String(x.s || "")));
+          prow.appendChild(tag);
+        });
+        cell.appendChild(prow);
+      }
+
+      if (c.sex) cell.appendChild(mk("div", "sexlin", String(c.sex)));
+
       box.appendChild(cell);
     });
     wrap.appendChild(box);
