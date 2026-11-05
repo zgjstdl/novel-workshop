@@ -168,6 +168,21 @@
     #play{padding-bottom:calc(6px + env(safe-area-inset-bottom))}
     .acts{gap:8px}
     .modal .sheet{max-height:92vh}
+
+    /* 选项：手机上一屏要能同时看到正文和全部选项 */
+    #p-choices{max-height:34vh}
+    .choices{gap:6px;margin:0 0 6px}
+    .choice{padding:7px 11px;font-size:14px;line-height:1.5;gap:2px;border-radius:9px}
+    .choice .cm{font-size:10px;gap:5px;line-height:1.35;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+    .choice .cm .k{padding:0 4px;margin-right:4px}
+
+    /* 属性条也压一压 */
+    #play .stats{margin:4px 0 6px;gap:6px}
+    .stat{padding:5px 9px}
+    .stat .lab{font-size:11px}
+    .stat .lab b{font-size:12px}
+    .stat .bar{height:3px;margin-top:3px}
   }
 
   /* ===== 游戏页：顶栏与输入框常驻，只有正文区滚动 ===== */
@@ -1477,7 +1492,7 @@ function renderStats() {
     d.className = "stat";
     var lab = document.createElement("div");
     lab.className = "lab";
-    var a = document.createElement("span"); a.textContent = s.label;
+    var a = document.createElement("span"); a.textContent = s.label; a.title = s.label + "（" + v + "/" + mx + "）";
     var b = document.createElement("b"); b.textContent = v + "/" + mx;
     lab.appendChild(a); lab.appendChild(b);
     var track = document.createElement("div");
@@ -1561,6 +1576,7 @@ function renderChoices() {
     var t = document.createElement("span");
     t.className = "ct";
     t.textContent = c.t;
+    t.title = c.t;
     b.appendChild(t);
     if (c.k || c.d) {
       var m = document.createElement("span");
