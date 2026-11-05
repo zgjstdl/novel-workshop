@@ -190,6 +190,18 @@
   #play{height:100vh;height:100dvh;min-height:0;overflow:hidden;padding-bottom:6px;max-width:100%}
   #play .top{flex:0 0 auto;z-index:6;padding-bottom:8px;min-width:0;
     background:linear-gradient(180deg,#0b0810 74%,rgba(11,8,16,0))}
+  #p-statwrap{flex:0 0 auto;min-width:0}
+  .statfold{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-family:inherit;
+    font-size:11px;line-height:1.4;color:#7d7263;background:transparent;border:none;padding:1px 2px 3px;cursor:pointer}
+  .statfold span{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.04em}
+  .statfold i{flex:0 0 auto;width:0;height:0;font-size:0;line-height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid #8a7c63;transition:transform .16s}
+  #p-statwrap.folded .statfold i{transform:rotate(-90deg)}
+  #p-statwrap.folded #p-stats{display:none}
+  #p-statwrap.folded .statfold span{color:#a08d6c}
+  #p-statwrap:not(.folded) .statfold{height:13px;padding:0 2px;justify-content:flex-end}
+  #p-statwrap:not(.folded) .statfold span{color:#8a7c63;letter-spacing:.12em}
+
+
   #play .stats{flex:0 0 auto;margin:6px 0 8px;min-width:0}
   .stat{min-width:0}
   .stat .lab{min-width:0}
@@ -345,7 +357,12 @@
     <span class="runbadge" id="p-run" hidden></span>
     <button class="ico" id="btn-menu" title="菜单">⋯</button>
   </header>
-  <div class="stats" id="p-stats"></div>
+  <div id="p-statwrap">
+    <button class="statfold" id="stat-toggle" type="button">
+      <span id="stat-sum">属性</span><i>▾</i>
+    </button>
+    <div class="stats" id="p-stats"></div>
+  </div>
   <main id="p-log"></main>
   <div class="choices" id="p-choices"></div>
   <div class="composer">
@@ -655,10 +672,11 @@ function loadCfg() {
     var c = JSON.parse(localStorage.getItem("jw-cfg") || "null");
     if (c && c.base) {
       if (typeof c.castOpen !== "boolean") c.castOpen = true;
+      if (typeof c.statOpen !== "boolean") c.statOpen = true;
       return c;
     }
   } catch (e) {}
-  return { base: "", key: "", model: "", temp: 0.9, len: 2, maxTok: 2048, castOpen: true };
+  return { base: "", key: "", model: "", temp: 0.9, len: 2, maxTok: 2048, castOpen: true, statOpen: true };
 }
 function saveCfg() {
   try { localStorage.setItem("jw-cfg", JSON.stringify(cfg)); } catch (e) {}
@@ -1503,6 +1521,28 @@ function renderStats() {
     d.appendChild(lab); d.appendChild(track);
     box.appendChild(d);
   });
+  statSummary = w.pack.stats.map(function (s) {
+    return s.label + " " + (w.state[s.key] || 0);
+  }).join(" · ");
+  paintStatSum();
+}
+
+/* 折叠条上的字：展开说「属性」，收起说数值 */
+var statSummary = "";
+function paintStatSum() {
+  var sum = $("stat-sum");
+  if (!sum) return;
+  if (cfg.statOpen === false) sum.textContent = statSummary || "属性";
+  else sum.textContent = "属性";
+}
+
+/* 属性条展开 / 收起 */
+function applyStatFold() {
+  var wrap = $("p-statwrap");
+  if (!wrap) return;
+  if (cfg.statOpen === false) wrap.classList.add("folded");
+  else wrap.classList.remove("folded");
+  paintStatSum();
 }
 
 function scrollLog(force, smooth) {
@@ -3664,6 +3704,12 @@ try {
 
 applyFont();
 
+$("stat-toggle").onclick = function () {
+  cfg.statOpen = (cfg.statOpen === false);
+  saveCfg();
+  applyStatFold();
+};
+applyStatFold();
 $("btn-seed").onclick = function () { seedWorks(false); };
 
 $("btn-backup").onclick = function () {
