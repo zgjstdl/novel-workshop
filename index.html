@@ -1757,8 +1757,15 @@ function renderSpot() {
 /* ================= 回合 ================= */
 function cut(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s; }
 
-function cardBlock(p, ctx) {
-  ctx = String(ctx || "");
+/* ================= 提示词预算 ================= */
+/* 中文约 1 字 1 token 量级，按 max_tokens 反推上下文预算，留足余量 */
+function sysBudget() {
+  var mt = Number(cfg.maxTok) || 2048;
+  return Math.max(6000, Math.min(24000, mt * 4));
+}
+
+/* ================= 人物卡 ================= */
+function charsBlock(p) {
   var out = [];
   var chars = (p.characters || []).filter(function (c) { return c.active; }).slice(0, 8);
   if (chars.length) {
@@ -1775,22 +1782,89 @@ function cardBlock(p, ctx) {
       out.push("· " + bits.join("｜"));
     });
   }
-  var sets = (p.settings || []).filter(function (s) {
-    if (!s.active) return false;
-    var keys = String(s.keys || "").split(/[,，、;；\s]+/).filter(Boolean);
-    if (!keys.length) return true;              // 没写触发词：启用就注入
-    for (var i = 0; i < keys.length; i++) {
-      if (ctx.indexOf(keys[i]) >= 0) return true; // 命中触发词：自动注入
-    }
-    return false;
-  }).slice(0, 8);
-  if (sets.length) {
-    out.push("【设定卡 · 关键词命中自动注入】");
-    sets.forEach(function (s) {
-      out.push("· " + s.name + "（" + s.type + "）：" + cut(s.detail, 100));
-    });
-  }
   return out.join("\n");
+}
+
+/* ================= 世界书：常驻 + 两级递归触发 + 字符预算 ================= */
+/* keys 里写 * 表示常驻条目，不受触发词限制 */
+function loreBlock(p, ctx, budget) {
+  ctx = String(ctx || "");
+  budget = budget || 0;
+  if (budget < 60) return [];
+  var all = (p.settings || []).filter(function (s) { return s.active; });
+  var hit = [], used = {}, cost = 0, scan = [ctx];
+
+  function line(s) { return "· " + s.name + "（" + s.type + "）：" + cut(s.detail, 100); }
+  function take(s) {
+    if (used[s.id]) return false;
+    var t = line(s);
+    if (cost + t.length + 1 > budget) return false;
+    used[s.id] = 1; cost += t.length + 1; hit.push(t);
+    scan.push(s.name + " " + s.detail);      // 命中条目的正文参与下一轮扫描
+    return true;
+  }
+  function keysOf(s) {
+    return String(s.keys || "").split(/[,，、;；\s]+/).filter(Boolean);
+  }
+
+  // 第一轮：常驻项 + 主键命中
+  all.forEach(function (s) {
+    var keys = keysOf(s);
+    if (!keys.length || keys.indexOf("*") >= 0) { take(s); return; }
+    for (var i = 0; i < keys.length; i++) {
+      if (ctx.indexOf(keys[i]) >= 0) { take(s); return; }
+    }
+  });
+
+  // 第二轮：拿已命中条目的正文再扫一遍（二级触发）
+  var src = scan.join("\n");
+  all.forEach(function (s) {
+    if (used[s.id] || !s.keys) return;
+    var keys = keysOf(s).filter(function (k) { return k !== "*"; });
+    for (var i = 0; i < keys.length; i++) {
+      if (src.indexOf(keys[i]) >= 0) { take(s); return; }
+    }
+  });
+  return hit;
+}
+
+/* ================= 事实：分桶 + 按需召回 ================= */
+function factText(f) {
+  return typeof f === "string" ? String(f) : String((f && f.text) || "");
+}
+function factTag(f) {
+  return (typeof f === "string" ? "" : String((f && f.tag) || ""));
+}
+function factsBlock(w, ctx, budget) {
+  var list = (w.facts || []).filter(Boolean);
+  if (!list.length || budget < 40) return "";
+  var must = [], rest = [];
+  list.forEach(function (f, i) {
+    var tag = factTag(f);
+    var txt = factText(f);
+    var key = txt.slice(0, 4);
+    var hit = key.length >= 2 && ctx && ctx.indexOf(key) >= 0;
+    if (tag === "目标" || tag === "承诺" || hit) must.push({ f: f, i: i });
+    else rest.push({ f: f, i: i });
+  });
+  rest.sort(function (a, b) { return b.i - a.i; });   // 新的优先
+
+  var out = [], cost = 0, seen = {};
+  function push(f) {
+    var txt = cut(factText(f), 60);
+    var t = "· " + txt;
+    if (!txt || seen[t] || cost + t.length > budget) return;
+    for (var k = 0; k < out.length; k++) {          // 互为子串的条目只留一条
+      var o = out[k].slice(2);
+      if (o.indexOf(txt) >= 0 || txt.indexOf(o) >= 0) return;
+    }
+    seen[t] = 1; cost += t.length; out.push(t);
+  }
+  must.forEach(function (o) { push(o.f); });
+  for (var j = 0; j < rest.length; j++) push(rest[j].f);
+
+  if (!out.length) return "";
+  return "已发生的事实（必须遵守，不要遗忘，也不要重复叙述）：\n" + out.join("\n");
 }
 
 /* ================= 导演：NPC 自主 + 随机事件 ================= */
@@ -1982,25 +2056,24 @@ function buildSystem(w) {
 
   // 触发词命中的上下文：最近 6 条 + 本轮输入
   var ctx = w.log.slice(-6).map(function (e) { return e.text || ""; }).join("\n");
-  var facts = (w.facts || []).filter(Boolean).slice(-10);
-
   var p = w.pack;
-  return [
+  var budget = sysBudget();
+
+  var head = [
     "你是一部互动小说的叙事引擎，用第二人称现在时续写，主角是「你」。",
     spotBlock(w),
     "作品：" + p.title + "（" + p.genre + "）",
-    p.premise ? "主线：" + p.premise : "",
-    p.world ? "世界观：" + p.world : "",
-    cardBlock(p, ctx),
+    p.premise ? "主线：" + cut(p.premise, 160) : "",
+    p.world ? "世界观：" + cut(p.world, 260) : "",
+    charsBlock(p),
     heroBlock(p.hero),
     runBlock(w),
     "文风：" + p.style,
-    p.rules.length ? "世界规则：" + p.rules.join("；") : "",
-    p.hooks.length ? "可用冲突：" + p.hooks.join("；") : "",
     "当前状态：" + st,
-    directorBlock(w),
-    w.summary ? "前情提要：" + w.summary : "",
-    facts.length ? "已发生的事实（必须遵守，不要遗忘，也不要重复叙述）：\n" + facts.map(function (f) { return "· " + cut(f, 60); }).join("\n") : "",
+    directorBlock(w)
+  ].filter(Boolean).join("\n");
+
+  var tail = [
     "写作要求：",
     paceBlock(w),
     lastTail(w),
@@ -2029,6 +2102,32 @@ function buildSystem(w) {
     "· sex 只在该角色此刻正卷入情欲场面时填写，1 到 2 句，写出生理实况（湿润、充血、肿胀、收缩、发软、酸痛、体液残留、衣物的状态），用具体词，不要用「那种感觉」「异样的刺激」这类回避说法，也不要写心理挣扎。角色不在情境中就填空字符串。",
     "· 尺度为「全年龄」或「暗涌」时，sex 一律留空。"
   ].filter(Boolean).join("\n");
+
+  // 剩余预算按「世界书 → 事实 → 前情 → 规则 → 冲突」的顺序分配
+  var room = budget - head.length - tail.length;
+  var opt = [];
+
+  var lo = loreBlock(p, ctx, Math.max(0, Math.min(1300, room)));
+  if (lo.length) {
+    var loTxt = "【设定卡 · 关键词命中自动注入】\n" + lo.join("\n");
+    opt.push(loTxt); room -= loTxt.length;
+  }
+  var fb = factsBlock(w, ctx, Math.max(0, Math.min(800, room)));
+  if (fb) { opt.push(fb); room -= fb.length; }
+  if (room > 120 && w.summary) {
+    var sm = "前情提要：" + cut(w.summary, Math.min(360, room - 10));
+    opt.push(sm); room -= sm.length;
+  }
+  if (room > 120 && p.rules && p.rules.length) {
+    var rTxt = "世界规则：" + p.rules.join("；");
+    if (rTxt.length < room) { opt.push(rTxt); room -= rTxt.length; }
+  }
+  if (room > 100 && p.hooks && p.hooks.length) {
+    var hTxt = "可用冲突：" + p.hooks.join("；");
+    if (hTxt.length < room) { opt.push(hTxt); room -= hTxt.length; }
+  }
+
+  return [head, opt.join("\n"), tail].filter(Boolean).join("\n");
 }
 
 /* META 的 JSON 模板：主提示词与「补发 META」共用 */
@@ -2565,14 +2664,17 @@ function compactMemory(w) {
   llm([
     {
       role: "system",
-      content: "你是剧情记忆整理器。只输出 JSON：{\"summary\":\"120 字以内的前情提要\",\"facts\":[\"关键事实\"]}。" +
-        "facts 记录：得到或失去的东西、结下的仇与欠下的债、到过的地方、当前目标与承诺。每条 20 字以内，最多 10 条。" +
-        "旧的 facts 若仍然有效必须保留，已经了结的删掉。不要写空话。"
+      content: "你是剧情记忆整理器。只输出 JSON：{\"summary\":\"120 字以内的前情提要\",\"facts\":[{\"tag\":\"物|债|地|目标|承诺\",\"text\":\"关键事实\"}]}。" +
+        "tag 五选一：物=得到或失去的东西；债=结下的仇与欠下的债；地=到过的地方；目标=当前目标；承诺=答应过别人的事。" +
+        "text 每条 20 字以内，最多 18 条。旧的 facts 若仍然有效必须保留（保留原 tag），已经了结的删掉。不要写空话。"
     },
     {
       role: "user",
       content: (w.summary ? "已有提要：" + w.summary + "\n" : "") +
-        ((w.facts && w.facts.length) ? "已有要点：\n" + w.facts.join("\n") + "\n" : "") +
+        ((w.facts && w.facts.length) ? "已有要点：\n" + w.facts.map(function (f) {
+          var t = factTag(f);
+          return (t ? "[" + t + "] " : "") + factText(f);
+        }).join("\n") + "\n" : "") +
         "最近片段：\n" + recent
     }
   ], { temp: 0.3, timeout: 60000 }).then(function (raw) {
@@ -2580,7 +2682,13 @@ function compactMemory(w) {
     try { d = parseJSON(raw); } catch (e) { d = null; }
     if (!d) return;
     if (d.summary) w.summary = String(d.summary).slice(0, 400);
-    if (Array.isArray(d.facts)) w.facts = d.facts.slice(0, 10).map(String);
+    if (Array.isArray(d.facts)) {
+      w.facts = d.facts.map(function (f) {
+        if (typeof f === "string") return { tag: "物", text: f.slice(0, 40), turn: w.turns || 0 };
+        f = f || {};
+        return { tag: String(f.tag || "物"), text: String(f.text || "").slice(0, 40), turn: Number(f.turn) || w.turns || 0 };
+      }).filter(function (f) { return f.text; }).slice(0, 18);
+    }
     saveWorks();
   }).catch(function () {});
 }
