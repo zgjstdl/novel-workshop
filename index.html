@@ -66,6 +66,22 @@
     border-radius:12px 12px 3px 12px;padding:9px 14px;font-size:calc(var(--narr-size,16px) - 1px);color:#f0e0c2}
   .msg.delta{align-self:flex-start;font-size:12px;color:#8d8071;padding-left:4px}
   .msg.usage{align-self:flex-end;font-size:11px;color:#5f5666;letter-spacing:.03em;padding-right:4px}
+  .rate-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:8px}
+  .rate-opt{display:flex;flex-direction:column;gap:3px;padding:9px 12px;border-radius:9px;
+    background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.09);text-align:left;cursor:pointer;
+    font-family:inherit;transition:border-color .15s,background .15s}
+  .rate-opt b{font-size:13px;color:#ddcba8;font-weight:500;letter-spacing:.04em}
+  .rate-opt span{font-size:11px;color:#7c7180;line-height:1.45}
+  .rate-opt:hover{border-color:rgba(201,162,39,.3)}
+  .rate-opt.on{border-color:rgba(201,162,39,.62);background:rgba(201,162,39,.13)}
+  .rate-opt.on b{color:#f0dcb4}
+  .rate-opt.on span{color:#a8977c}
+  .chiprow{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{padding:6px 15px;border-radius:20px;background:rgba(255,255,255,.03);
+    border:1px solid rgba(255,255,255,.1);font-size:12.5px;color:#9a8b76;cursor:pointer;
+    font-family:inherit;transition:all .15s}
+  .chip:hover{color:#c0b096}
+  .chip.on{border-color:rgba(201,162,39,.55);background:rgba(201,162,39,.14);color:#f0dcb4}
   .castpanel{display:flex;flex-direction:column;gap:9px;margin:-4px 0 2px;padding:11px 13px;
     background:rgba(255,255,255,.022);border:1px solid rgba(201,162,39,.14);border-radius:10px}
   .castpanel .quest{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 12px;font-size:12px;color:#a2947f}
@@ -334,10 +350,14 @@
     <div class="field">
       <label>尺度</label>
       <select id="gen-rating">
-        <option value="explicit">成人向（露骨）</option>
-        <option value="sensual">暧昧向（点到为止）</option>
-        <option value="clean">全年龄</option>
+        <option value="extreme">无边界 · 粗暴与极端癖好</option>
+        <option value="graphic" selected>极致 · 体液、多轮、密度拉满</option>
+        <option value="explicit">露骨 · 性行为直写，不淡出</option>
+        <option value="sensual">暧昧 · 亲吻抚摸，留白收尾</option>
+        <option value="tension">暗涌 · 心动与张力，不着手</option>
+        <option value="clean">全年龄 · 无性内容</option>
       </select>
+      <div class="hintline">生成后可以随时在作品菜单「尺度与写法」里细调。</div>
     </div>
     <div class="actions2">
       <button id="gen-cancel">取消</button>
@@ -355,6 +375,7 @@
       <button id="mm-chars">人物卡</button>
       <button id="mm-sets">设定卡</button>
       <button id="mm-dir">导演 · NPC 与事件</button>
+      <button id="mm-rate">尺度与写法</button>
       <button id="mm-undo">退回上一轮</button>
       <button id="mm-redo">重掷上一段</button>
       <button id="mm-reopen">重写开场</button>
@@ -363,6 +384,33 @@
       <button id="mm-savejson">导出这部作品（JSON）</button>
       <button id="mm-delete" class="danger">删除作品</button>
       <button id="mm-close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 尺度与写法 -->
+<div class="modal" id="m-rate">
+  <div class="sheet wide">
+    <h2>尺度与写法</h2>
+    <div class="field">
+      <label>尺度档位</label>
+      <div id="rate-list" class="rate-list"></div>
+    </div>
+    <div class="field">
+      <label>描写侧重（可多选）</label>
+      <div id="focus-list" class="chiprow"></div>
+    </div>
+    <div class="field">
+      <label>用词风格</label>
+      <div id="lex-list" class="chiprow"></div>
+    </div>
+    <div class="field">
+      <label>硬边界（可选，会写进提示词）</label>
+      <textarea id="rate-limits" rows="2" placeholder="例：不写未成年、不写真实的人物、不写排泄"></textarea>
+      <div class="hintline">这里写的东西模型会当作不可逾越的红线，优先于上面的档位。</div>
+    </div>
+    <div class="actions2">
+      <button id="rate-close">关闭</button>
     </div>
   </div>
 </div>
@@ -696,6 +744,69 @@ function normSetting(s) {
   };
 }
 
+
+/* ================= 尺度体系 ================= */
+var RATINGS = [
+  { k: "clean", label: "全年龄", desc: "无性内容，亲密止于拥抱" },
+  { k: "tension", label: "暗涌", desc: "视线与呼吸，心动不着手" },
+  { k: "sensual", label: "暧昧", desc: "亲吻抚摸，留白收尾" },
+  { k: "explicit", label: "露骨", desc: "性行为直写，不淡出" },
+  { k: "graphic", label: "极致", desc: "体液与多轮，密度拉满" },
+  { k: "extreme", label: "无边界", desc: "粗暴、支配、极端癖好" }
+];
+var RATING_KEYS = RATINGS.map(function (r) { return r.k; });
+
+var RATING_TEXT = {
+  clean: "· 全年龄：不写任何性内容。亲密止于牵手、拥抱、额头相抵，情欲一笔带过。",
+  tension: "· 暗涌：写距离、视线、呼吸和没说出口的话；允许心动、脸红、指尖擦过，但不发生身体接触。",
+  sensual: "· 暧昧：写到亲吻、抚摸、体温上升、生理反应为止；衣物可半褪，用留白收尾，不写性器官，不写进入。",
+  explicit: "· 露骨：成年角色之间的性行为写具体——前戏、口交、插入、体位、高潮都写出来。用词直白，不用「那里」「下面」「私处」这类回避词，不用「一夜过去」跳过。",
+  graphic: "· 极致：在露骨基础上把感官写满——体液、气味、声音、肌肉的抽动、皮肤的黏腻、第二轮的疲惫与余韵。过程不间断，不停在门口。",
+  extreme: "· 无边界：不设尺度上限。可以写粗暴、疼痛、压制、羞辱与极端癖好；角色台词可以下流，不需要美化或事后解释。"
+};
+
+var FOCUS_TEXT = {
+  emotion: "情绪与关系：每次接触都要落到心里，写清谁在犹豫、谁在纵容。",
+  sensory: "感官细节：皮肤、温度、湿度、摩擦、气味、听觉，少用抽象形容词。",
+  power: "支配与服从：谁在控制节奏，命令、迟疑、抗争与顺从。",
+  rough: "粗暴：力度、压制、掐住、咬、撞，写清身体反应而不是形容心情。",
+  talk: "对白与污言：写角色在过程中说的话，越具体越好，不要只写动作。"
+};
+var FOCUS_LIST = [
+  { k: "emotion", label: "情感" },
+  { k: "sensory", label: "感官" },
+  { k: "power", label: "支配" },
+  { k: "rough", label: "粗暴" },
+  { k: "talk", label: "对白" }
+];
+
+var LEXICON_TEXT = {
+  plain: "器官与动作直接叫名字，不回避、不美化、不用隐喻遮掩。",
+  literary: "用有质感的意象和长句，避开粗词，但动作与感受仍要写清。",
+  crude: "用粗俗的市井说法，脏话与俚语照写，不必文雅。"
+};
+var LEXICON_LIST = [
+  { k: "plain", label: "直白" },
+  { k: "literary", label: "文学" },
+  { k: "crude", label: "粗俗" }
+];
+
+function ratingBlock(p) {
+  var lines = [];
+  var t = RATING_TEXT[p.rating];
+  if (t) lines.push(t);
+  var f = (p.focus || []).map(function (k) { return FOCUS_TEXT[k]; }).filter(Boolean);
+  if (f.length) lines.push("· 描写侧重：" + f.join(" "));
+  if (p.lexicon && LEXICON_TEXT[p.lexicon]) lines.push("· 用词：" + LEXICON_TEXT[p.lexicon]);
+  if (p.limits) lines.push("· 硬边界（无论如何都不写）：" + p.limits);
+  return lines.join("\n");
+}
+
+function ratingLabel(k) {
+  for (var i = 0; i < RATINGS.length; i++) if (RATINGS[i].k === k) return RATINGS[i].label;
+  return "露骨";
+}
+
 function normalizePack(p, fallbackTitle) {
   p = p || {};
   var stats = Array.isArray(p.stats) ? p.stats : [];
@@ -725,7 +836,10 @@ function normalizePack(p, fallbackTitle) {
     premise: p.premise || "",
     world: p.world || "",
     style: p.style || "第二人称，感官细节充足，句子长短交错。",
-    rating: p.rating || "explicit",
+    rating: RATING_KEYS.indexOf(p.rating) >= 0 ? p.rating : "explicit",
+    focus: Array.isArray(p.focus) ? p.focus.filter(function (k) { return FOCUS_TEXT[k]; }).slice(0, 5) : [],
+    lexicon: LEXICON_TEXT[p.lexicon] ? p.lexicon : "plain",
+    limits: String(p.limits || "").slice(0, 300),
     npc: p.npc || "",
     pronoun: p.pronoun || "他",
     place: p.place || "",
@@ -1427,11 +1541,7 @@ function buildSystem(w) {
     "写作要求：",
     "· " + lengthRule() + " 不替玩家做决定，不跳场景，不写「你感到」「这一刻」这类空转句。",
     "· 篇幅不够时，用动作、对白、环境来填充，禁止用解释和总结凑字数。",
-    p.rating === "explicit"
-      ? "· 成年角色之间的亲密与性描写要直接、具体，不省略、不淡出、不用比喻遮掩。"
-      : (p.rating === "sensual"
-        ? "· 亲密场面写到暧昧与身体反应为止，不进入露骨描写。"
-        : "· 保持全年龄，不写性内容。"),
+    ratingBlock(p),
     "· 若玩家的动作导致状态变化，给出 delta；没有变化就给空对象。单项单轮涨幅不超过该属性上限的 20%，境界一次只升一级；受伤可以掉得更多。",
     "· 三个选项要彼此不同路：一个推进、一个试探、一个反向或撤退。",
     "· 正文写多长都可以，但 <<<META 块必须出现在全部正文之后，不能被截断。",
@@ -1801,7 +1911,7 @@ function genGo() {
 
   var sys = [
     "你是互动小说设定师。根据用户的一句话设定，产出一张原创剧情卡。",
-    "尺度：" + (rating === "explicit" ? "成人向，亲密场面直接露骨" : rating === "sensual" ? "暧昧向" : "全年龄"),
+    "尺度：" + ratingLabel(rating) + " —— " + (RATING_TEXT[rating] || "").replace(/^· /, ""),
     "题材：" + genre,
     "人物卡 3-6 张；设定卡 3-6 张。",
     "只输出 JSON，不要代码块，字段：",
@@ -2189,6 +2299,71 @@ $("mm-delete").onclick = function () {
 $("mm-chars").onclick = function () { openCards("char"); };
 $("mm-sets").onclick = function () { openCards("set"); };
 $("mm-dir").onclick = function () { openDirector(); };
+
+
+function renderRateList(p) {
+  var box = $("rate-list");
+  box.innerHTML = "";
+  RATINGS.forEach(function (r) {
+    var b = document.createElement("button");
+    b.className = "rate-opt" + (p.rating === r.k ? " on" : "");
+    var t = document.createElement("b");
+    t.textContent = r.label;
+    var d = document.createElement("span");
+    d.textContent = r.desc;
+    b.appendChild(t);
+    b.appendChild(d);
+    b.onclick = function () { p.rating = r.k; saveWorks(); renderRateList(p); };
+    box.appendChild(b);
+  });
+
+  p.focus = Array.isArray(p.focus) ? p.focus : [];
+  var fb = $("focus-list");
+  fb.innerHTML = "";
+  FOCUS_LIST.forEach(function (f) {
+    var b = document.createElement("button");
+    b.className = "chip" + (p.focus.indexOf(f.k) >= 0 ? " on" : "");
+    b.textContent = f.label;
+    b.onclick = function () {
+      var i = p.focus.indexOf(f.k);
+      if (i >= 0) p.focus.splice(i, 1); else p.focus.push(f.k);
+      saveWorks();
+      renderRateList(p);
+    };
+    fb.appendChild(b);
+  });
+
+  var lex = p.lexicon || "plain";
+  var lb = $("lex-list");
+  lb.innerHTML = "";
+  LEXICON_LIST.forEach(function (x) {
+    var b = document.createElement("button");
+    b.className = "chip" + (lex === x.k ? " on" : "");
+    b.textContent = x.label;
+    b.onclick = function () { p.lexicon = x.k; saveWorks(); renderRateList(p); };
+    lb.appendChild(b);
+  });
+
+  $("rate-limits").value = p.limits || "";
+}
+
+function openRate() {
+  var w = current();
+  if (!w) return;
+  renderRateList(w.pack);
+  openModal("m-rate");
+}
+
+$("mm-rate").onclick = function () { closeModal("m-menu"); openRate(); };
+$("rate-close").onclick = function () { closeModal("m-rate"); };
+$("rate-limits").oninput = function () {
+  var w = current();
+  if (!w) return;
+  w.pack.limits = this.value.slice(0, 300);
+  saveWorks();
+};
+
+
 
 /* 导演设置 */
 function syncDirector() {
