@@ -181,6 +181,26 @@
   #p-choices::-webkit-scrollbar-thumb{background:rgba(201,162,39,.28);border-radius:3px}
   #p-choices::-webkit-scrollbar-track{background:transparent}
   #p-choices:empty{display:none}
+  .run-perks{display:flex;flex-direction:column;gap:7px;margin-top:2px}
+  .perk{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-radius:9px;cursor:pointer;
+    border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.022);transition:.14s}
+  .perk:hover{border-color:rgba(201,162,39,.35)}
+  .perk.on{border-color:rgba(201,162,39,.6);background:rgba(201,162,39,.09)}
+  .perk.off{opacity:.42;cursor:not-allowed}
+  .perk .pk{flex:0 0 auto;width:9px;height:9px;border-radius:50%;margin-top:6px;
+    border:1.5px solid rgba(201,162,39,.5)}
+  .perk.on .pk{background:#c9a227;box-shadow:0 0 7px rgba(201,162,39,.6)}
+  .perk .pt2{flex:1 1 auto;min-width:0}
+  .perk .pn{font-size:14px;color:#f0e6d2;display:flex;gap:7px;align-items:baseline;flex-wrap:wrap}
+  .perk .pd{font-size:12px;color:#948a80;line-height:1.65;margin-top:3px}
+  .perk .tag{font-size:10px;padding:1px 6px;border-radius:6px;color:#c9a227;
+    background:rgba(201,162,39,.13);letter-spacing:.05em}
+  .perk .used{font-size:10px;color:#7c736b}
+  .run-echo{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:#a99f94;line-height:1.7}
+  .run-echo i{color:#7c736b;font-style:normal;margin-right:6px}
+  .runbadge{display:inline-block;align-self:center;flex:0 0 auto;margin-right:2px;padding:1px 7px;border-radius:9px;
+    font-size:11px;letter-spacing:.06em;color:#e8d3a0;background:rgba(201,162,39,.16);
+    border:1px solid rgba(201,162,39,.34);font-weight:400}
   #play .composer{position:static;flex:0 0 auto;padding:8px 0 2px;background:none;min-width:0}
   #play .footnote{padding:2px 0 0}
   #play .top h1{font-size:19px}
@@ -277,6 +297,7 @@
       <h1 id="p-title">—</h1>
       <p id="p-sub">—</p>
     </div>
+    <span class="runbadge" id="p-run" hidden></span>
     <button class="ico" id="btn-menu" title="菜单">⋯</button>
   </header>
   <div class="stats" id="p-stats"></div>
@@ -421,6 +442,8 @@
     <h2 id="menu-title">作品</h2>
     <div class="actions2" style="justify-content:stretch;flex-direction:column">
       <button id="mm-edit">编辑剧情卡</button>
+      <button id="mm-hero">主角卡</button>
+      <button id="mm-run">周目 · 能力</button>
       <button id="mm-chars">人物卡</button>
       <button id="mm-sets">设定卡</button>
       <button id="mm-dir">导演 · NPC 与事件</button>
@@ -470,6 +493,7 @@
   <div class="sheet wide">
     <h2>卡片库</h2>
     <div class="tabs">
+      <button id="tab-hero">主角卡</button>
       <button id="tab-char" class="on">人物卡</button>
       <button id="tab-set">设定卡</button>
     </div>
@@ -478,6 +502,28 @@
       <button id="card-add">＋ 新增</button>
       <button id="card-ai">AI 补卡</button>
       <button id="card-close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 周目 · 能力 -->
+<div class="modal" id="m-run">
+  <div class="sheet wide">
+    <h2 id="run-h">周目</h2>
+    <p class="hintline" id="run-top"></p>
+    <div class="field">
+      <label id="run-pick-label">这一世带着哪些能力进场</label>
+      <div id="run-perks" class="run-perks"></div>
+    </div>
+    <div class="field">
+      <label>前几世留下的（只作直觉用，模型不会明说）</label>
+      <div id="run-echo" class="run-echo"></div>
+    </div>
+    <div class="hintline">开新周目会清空正文、属性、状态栏和回退记录；人物卡、设定卡、事件、主角卡保留。旧周目的结尾会变成「前世残影」。</div>
+    <div class="actions2">
+      <button id="run-gen">让模型造几个能力</button>
+      <button id="run-new" class="primary">开始新周目</button>
+      <button id="run-close">关闭</button>
     </div>
   </div>
 </div>
@@ -889,6 +935,34 @@ function ratingLabel(k) {
   return "露骨";
 }
 
+function normHero(h) {
+  h = h || {};
+  function t(v, n) { return String(v == null ? "" : v).slice(0, n); }
+  return {
+    name: t(h.name, 12) || "你",
+    alias: t(h.alias, 20),
+    identity: t(h.identity, 40),
+    look: t(h.look, 80),
+    persona: t(h.persona, 80),
+    voice: t(h.voice, 80),
+    want: t(h.want, 60),
+    fear: t(h.fear, 60),
+    secret: t(h.secret, 80)
+  };
+}
+
+function normPerk(x, i) {
+  x = x || {};
+  var nm = String(x.name || x.title || ("能力" + (i + 1))).slice(0, 16);
+  return {
+    id: String(x.id || ("p" + i + "_" + nm)).slice(0, 24),
+    name: nm.slice(0, 16),
+    desc: String(x.desc || x.text || x.effect || "").slice(0, 60),
+    tag: String(x.tag || x.kind || x.type || "").slice(0, 8),
+    tier: Math.max(1, Math.min(5, Number(x.tier) || 1))
+  };
+}
+
 function normalizePack(p, fallbackTitle) {
   p = p || {};
   var stats = Array.isArray(p.stats) ? p.stats : [];
@@ -936,7 +1010,9 @@ function normalizePack(p, fallbackTitle) {
       evEvery: Math.max(0, Math.min(20, Number(p.director && p.director.evEvery) || 5))
     },
     characters: (Array.isArray(p.characters) ? p.characters : []).slice(0, 12).map(normChar),
-    settings: (Array.isArray(p.settings) ? p.settings : []).slice(0, 12).map(normSetting)
+    settings: (Array.isArray(p.settings) ? p.settings : []).slice(0, 12).map(normSetting),
+    hero: normHero(p.hero),
+    perks: (Array.isArray(p.perks) ? p.perks : []).slice(0, 12).map(normPerk)
   };
 }
 
@@ -952,6 +1028,7 @@ function createWork(pack) {
     created: Date.now(),
     updated: Date.now()
   };
+  w.run = { no: 1, perks: [], echoes: [], endings: [], seen: [] };
   pack.stats.forEach(function (s) { w.state[s.key] = s.start; });
   var open = pack.opening.join("\n\n");
   w.log.push({ role: "narr", text: open });
@@ -998,6 +1075,29 @@ var GUI_SETTINGS = [
   { name: "石岩门派", type: "地点", keys: "石岩门派,门派,弟子,掌门,珍宝阁,地塔", detail: "建在半空石台上的门派，门前有阵法光罩。珍宝阁分四层，修炼地塔七层，塔底封着一条百米精脉。", active: true },
   { name: "归墟神境", type: "地点", keys: "归墟神境,随身空间,空间,钻进去", detail: "叶缺的随身空间，约一百平方，灰色、安静、什么都没有。可藏身储物，但脆弱，装不下整条精脉。", active: true },
   { name: "万兽山", type: "地点", keys: "万兽山,兽王,告状", detail: "比沉岩山脉更高一层的妖兽势力，连兽王都要用汇报两个字。", active: true }
+];
+
+var GUI_HERO = {
+  name: "叶缺",
+  alias: "龟爷爷",
+  identity: "车祸后魂穿成陆龟的现代社畜，吞噬合成进化系统的唯一宿主",
+  look: "巴掌大的陆龟，壳是灰的，如今长出黑金骨刺；眼睛还是人的眼睛，盯久了叫人发毛",
+  persona: "嘴碎、惜命、记仇。嘴上认怂，动起手比谁都狠；见不得谁欺负比自己弱的",
+  voice: "现代吐槽腔，自称「老子」「龟爷爷」，一紧张就冒网络梗；被叫死王八会立刻纠正——请不要在王八前面加一个死字",
+  want: "活着爬到没人能随手捏死他的位置，顺带把欠他的账一笔笔收回来",
+  fear: "又一次什么都还没做就死了；也怕自己慢慢忘掉当人时那点底线",
+  secret: "他清楚自己早不算人了——吃得越多爬得越高，就越像妖兽。这件事他不敢细想"
+};
+
+var GUI_PERKS = [
+  { name: "反击壳", desc: "被攻击时回敬一半伤害，代价是壳裂了要慢慢养，养不好会留疤", tag: "体质", tier: 1 },
+  { name: "吞噬合成", desc: "吃尸体得经验点，剧痛是常态，五天才能再进化一次", tag: "血统", tier: 1 },
+  { name: "暗影袭杀", desc: "贴到背后一击穿心，正面用出来就只是个普通撞击", tag: "技艺", tier: 2 },
+  { name: "秘术暴动", desc: "一分钟全属性翻半倍，用完脱力，三天冷却", tag: "体质", tier: 2 },
+  { name: "刺骨之吸", desc: "把对手往骨刺上吸，反伤照单全收——自己也得挨那一下", tag: "技艺", tier: 3 },
+  { name: "地王神印", desc: "四爪按地稳如钉死的山，代价是起身极慢，躲不开", tag: "契约", tier: 3 },
+  { name: "归墟神境", desc: "体内藏着一百平方的随身空间，一次只能开一小会儿", tag: "预感", tier: 4 },
+  { name: "虚空暗杀术", desc: "破防切喉，但对高出两个大境界的人无效", tag: "血统", tier: 4 }
 ];
 
 var SEEDS = [
@@ -1049,7 +1149,9 @@ var SEEDS = [
       var o = JSON.parse(JSON.stringify(s));
       o.active = true;
       return o;
-    })
+    }),
+    hero: JSON.parse(JSON.stringify(GUI_HERO)),
+    perks: JSON.parse(JSON.stringify(GUI_PERKS))
   },
   {
     title: "天啊！我变成了龟 · 地塔之后",
@@ -1100,7 +1202,9 @@ var SEEDS = [
       var o = JSON.parse(JSON.stringify(s));
       o.active = true;
       return o;
-    })
+    }),
+    hero: JSON.parse(JSON.stringify(GUI_HERO)),
+    perks: JSON.parse(JSON.stringify(GUI_PERKS))
   }
 ];
 
@@ -1294,6 +1398,7 @@ function openWork(id) {
   $("p-title").textContent = w.pack.title;
   $("p-sub").textContent = w.pack.subtitle || "";
   renderStats();
+  renderRunBadge(w);
   renderLog();
   if (!w.choices || !w.choices.length) w.choices = fallbackChoices(w);
   renderChoices();
@@ -1618,6 +1723,48 @@ function lengthRule() {
   return "承接玩家这一轮动作，写 400-600 字，3-4 段，每段 120-180 字，至少有一句对白。";
 }
 
+function heroBlock(h) {
+  if (!h || (!h.identity && !h.persona && !h.want)) return "";
+  var out = ["【主角 · 你】"];
+  out.push("· " + (h.name || "你") + (h.alias ? "（" + h.alias + "）" : "") +
+    (h.identity ? "，" + h.identity : ""));
+  if (h.look) out.push("· 外貌：" + h.look);
+  if (h.persona) out.push("· 性格：" + h.persona);
+  if (h.voice) out.push("· 说话习惯：" + h.voice);
+  if (h.want) out.push("· 想要：" + h.want);
+  if (h.fear) out.push("· 怕的是：" + h.fear);
+  if (h.secret) out.push("· 不敢承认的事（别的角色不会知道，也不要让他们猜破）：" + h.secret);
+  out.push("· 主角是玩家的身体和嘴。不要替他做决定，不要替他开口表态，也不要让他变成另一个人。");
+  return out.join("\n");
+}
+
+function runBlock(w) {
+  var r = w.run || {};
+  var perks = (r.perks || []).map(function (id) {
+    for (var i = 0; i < w.pack.perks.length; i++) if (w.pack.perks[i].id === id) return w.pack.perks[i];
+    return null;
+  }).filter(Boolean);
+  var no = r.no || 1;
+  var out = [];
+  if (no > 1 || perks.length) {
+    out.push("【第 " + no + " 周目】");
+    if (perks.length) {
+      out.push("· 这一世你带着这些能力进场：");
+      perks.forEach(function (p) {
+        out.push("  - " + p.name + "：" + (p.desc || "") + (p.tag ? "（" + p.tag + "）" : ""));
+      });
+      out.push("· 能力必须在这几轮里真正用上，而不是提一句名字。用到时要写清它怎么改变了局面、付出什么代价。");
+    }
+  }
+  var echoes = (r.echoes || []).filter(Boolean).slice(-5);
+  if (echoes.length) {
+    out.push("【前世残影】");
+    echoes.forEach(function (e) { out.push("· " + e); });
+    out.push("· 你对这些事有说不清的熟悉感：偶尔对着还没发生的结局心里一沉，或对某个刚见面的人下意识提防。禁止在台词里直接说「上一世」「周目」「重来」，只能写成直觉、既视感、无来由的笃定或回避。");
+  }
+  return out.join("\n");
+}
+
 function buildSystem(w) {
   var st = w.pack.stats.map(function (s) {
     return s.label + " " + (w.state[s.key] || 0) + "/" + (s.max || 100);
@@ -1634,6 +1781,8 @@ function buildSystem(w) {
     p.premise ? "主线：" + p.premise : "",
     p.world ? "世界观：" + p.world : "",
     cardBlock(p, ctx),
+    heroBlock(p.hero),
+    runBlock(w),
     "文风：" + p.style,
     p.rules.length ? "世界规则：" + p.rules.join("；") : "",
     p.hooks.length ? "可用冲突：" + p.hooks.join("；") : "",
@@ -2246,8 +2395,11 @@ function importGo(text) {
     "你是小说改编引擎。读入小说片段，产出一张可以运行的互动小说剧情卡。",
     "要求：忠实保留原作的人物、世界观、语气与关键冲突；把叙事改成第二人称「你」。",
     "人物卡 3-6 张，覆盖主角与主要对手；设定卡 3-6 张，覆盖关键地点、势力、物品或规则。",
+    "另外抽出：hero —— 主角本人的卡片（身份、外貌、性格、说话习惯、想要什么、怕什么、不敢承认的事）；perks —— 6-8 个原作里出现过的能力、功法、天赋或底牌，写清效果与代价，供多周目时挑选。",
     "只输出 JSON，不要代码块，字段如下：",
-    '{"title":"作品名","subtitle":"一句副标题","genre":"题材","premise":"两句话主线","world":"世界观，150字内","style":"文风要求，一句话","rating":"explicit","npc":"主要互动角色名","pronoun":"他/她","place":"开场地点","stats":[{"key":"heat","label":"中文名","start":20},{"key":"bond","label":"中文名","start":0},{"key":"will","label":"中文名","start":40}],"opening":["第二人称开场段落1","段落2","段落3","段落4"],"hooks":["可触发的冲突"],"rules":["世界规则"],"characters":[{"name":"角色名","role":"身份","relation":"与主角的关系","look":"外貌","persona":"性格","voice":"口吻与口癖","want":"想要什么","secret":"秘密"}],"settings":[{"name":"名称","type":"地点/势力/规则/物品","keys":"触发词,逗号分隔","detail":"细节"}]}'
+    '{"title":"作品名","subtitle":"一句副标题","genre":"题材","premise":"两句话主线","world":"世界观，150字内","style":"文风要求，一句话","rating":"explicit","npc":"主要互动角色名","pronoun":"他/她","place":"开场地点","stats":[{"key":"heat","label":"中文名","start":20},{"key":"bond","label":"中文名","start":0},{"key":"will","label":"中文名","start":40}],"opening":["第二人称开场段落1","段落2","段落3","段落4"],"hooks":["可触发的冲突"],"rules":["世界规则"],"characters":[{"name":"角色名","role":"身份","relation":"与主角的关系","look":"外貌","persona":"性格","voice":"口吻与口癖","want":"想要什么","secret":"秘密"}],"settings":[{"name":"名称","type":"地点/势力/规则/物品","keys":"触发词,逗号分隔","detail":"细节"}],' +
+    '"hero":{"name":"主角名","alias":"称号","identity":"身份","look":"外貌","persona":"性格","voice":"说话习惯","want":"想要什么","fear":"怕什么","secret":"不敢承认的事"},' +
+    '"perks":[{"name":"能力名","desc":"效果与代价","tag":"体质|预感|技艺|契约|血统","tier":1}]}'
   ].join("\n");
 
   llm([
@@ -2416,10 +2568,17 @@ function genGo() {
     "4. stats 给 5 项，key 用英文小写单词，label 用中文，start 在 0-60 之间，max 一律 100。这五项要贴合这个世界独有的东西，不要照搬通用的血量攻击。",
     "5. opening 写 5 段第二人称开场，合计 300 字以上。从具体动作或一句对白切入，不要交代身世、不要写「你感到」。",
     "6. events 给 8 条随机事件，每条 {title, cond, text}：title 六字内，cond 写触发前提，text 写具体发生什么（40 字内）。",
+    "7. hero 写清主角是谁：身份、外貌、性格、说话习惯、最想要什么、最怕什么、还有一件他自己都不敢承认的事。这是玩家的角色，不要写成 NPC，也不要写名字叫「你」。",
+    "8. perks 给 6-8 个能力，必须从这个世界的力量来源里长出来，不要写成通用的技能树。每个都写清在什么场面能用、代价是什么、会留下什么痕迹。难度要有梯度：一半是能立刻用的，剩下的是看着好但会反噬的。",
     "只输出 JSON，不要代码块，不要解释。字段：",
     '{"title":"作品名（四到八字）","subtitle":"副标题（一句钩子）","genre":"' + genre + '",' +
     '"premise":"主线，两句","world":"世界观，180 字，写清力量来源、社会结构、禁忌",' +
     '"style":"文风一句话","rating":"' + rating + '","npc":"主要互动角色名","pronoun":"他/她",' +
+    '"hero":{"name":"主角名","alias":"称号或外号，可空","identity":"身份，20 字","look":"外貌，30 字",' +
+    '"persona":"性格，30 字","voice":"说话习惯，20 字","want":"最想要的东西，20 字",' +
+    '"fear":"最怕的事，20 字","secret":"不敢承认的事，30 字"},' +
+    '"perks":[{"name":"能力名，四到六字","desc":"效果与代价，30 字，写清在什么场面能用",' +
+    '"tag":"体质|预感|技艺|契约|血统","tier":1}],' +
     '"place":"开场地点","stats":[{"key":"a","label":"中文","start":20,"max":100}],' +
     '"opening":["段落1","段落2","段落3","段落4","段落5"],"hooks":["1","2","3","4","5","6","7","8"],' +
     '"rules":["1","2","3","4","5","6"],' +
@@ -2495,6 +2654,25 @@ function ensureCards(w) {
     }
   }
   if (!w.pack.director) w.pack.director = { on: true, every: 2, evEvery: 5 };
+  if (!w.pack.hero) w.pack.hero = normHero({});
+  if (!Array.isArray(w.pack.perks)) w.pack.perks = [];
+  if (!w.pack.hero.identity || !w.pack.perks.length) {
+    for (var hk = 0; hk < SEEDS.length; hk++) {
+      if (SEEDS[hk].title === w.pack.title) {
+        if (!w.pack.hero.identity && SEEDS[hk].hero) w.pack.hero = normHero(SEEDS[hk].hero);
+        if (!w.pack.perks.length && Array.isArray(SEEDS[hk].perks)) {
+          w.pack.perks = SEEDS[hk].perks.map(normPerk);
+        }
+        break;
+      }
+    }
+  }
+  if (!w.run || typeof w.run !== "object") w.run = { no: 1, perks: [], echoes: [], endings: [], seen: [] };
+  if (!Array.isArray(w.run.perks)) w.run.perks = [];
+  if (!Array.isArray(w.run.echoes)) w.run.echoes = [];
+  if (!Array.isArray(w.run.endings)) w.run.endings = [];
+  if (!Array.isArray(w.run.seen)) w.run.seen = [];
+  if (!w.run.no) w.run.no = 1;
   if (!w.actors || typeof w.actors !== "object") w.actors = {};
   if (!Array.isArray(w.facts)) w.facts = [];
   (w.pack.settings || []).forEach(function (s) {
@@ -2524,6 +2702,17 @@ var CHAR_FIELDS = [
   ["secret", "秘密（模型知道但不会直说）", "textarea"],
   ["heat", "主动性 1-5（越高越容易自己出手）", "input"],
   ["mood", "当前情绪（可空）", "input"]
+];
+var HERO_FIELDS = [
+  ["name", "名字", "input"],
+  ["alias", "称号 / 外号", "input"],
+  ["identity", "身份（一句话）", "input"],
+  ["look", "外貌", "textarea"],
+  ["persona", "性格", "textarea"],
+  ["voice", "说话习惯（口癖、用词、语气）", "textarea"],
+  ["want", "最想要的东西", "textarea"],
+  ["fear", "最怕的事", "textarea"],
+  ["secret", "不敢承认的事（模型知道，别人猜不到）", "textarea"]
 ];
 var SET_FIELDS = [
   ["name", "名称", "input"],
@@ -2555,14 +2744,39 @@ function cardHTML(kind, c, i) {
       "</div></div></details>";
 }
 
+function heroCardHTML(h) {
+  var body = HERO_FIELDS.map(function (f) {
+    var val = escHTML(h[f[0]]);
+    var el = f[2] === "textarea"
+      ? '<textarea data-hf="' + f[0] + '" style="height:56px">' + val + "</textarea>"
+      : '<input data-hf="' + f[0] + '" value="' + val + '">';
+    return '<div class="field"><label>' + f[1] + "</label>" + el + "</div>";
+  }).join("");
+  var sub = [h.identity, h.want ? "想要：" + h.want : ""].filter(Boolean).join(" · ");
+  return '<details class="ck" open><summary><b>' + escHTML(h.name || "你") +
+    "</b><span>" + escHTML(sub) + "</span></summary>" +
+    '<div class="ck-body">' + body +
+    '<p class="hintline">主角是玩家的身体和嘴：模型会用这些设定来写你周围的世界，但不会替你说话、做决定。</p>' +
+    "</div></details>";
+}
+
 function renderCards() {
   var w = current(); if (!w) return;
   ensureCards(w);
+  $("tab-hero").classList.toggle("on", cardsTab === "hero");
   $("tab-char").classList.toggle("on", cardsTab === "char");
   $("tab-set").classList.toggle("on", cardsTab === "set");
+  var isHero = cardsTab === "hero";
+  $("card-add").hidden = isHero;
+  $("card-ai").hidden = isHero;
+
+  var box = $("card-list");
+  if (isHero) {
+    box.innerHTML = heroCardHTML(w.pack.hero || {});
+    return;
+  }
 
   var arr = cardsTab === "char" ? w.pack.characters : w.pack.settings;
-  var box = $("card-list");
   if (!arr.length) {
     box.innerHTML = '<p class="empty" style="padding:24px 0">还没有卡片。点下面「新增」，或者让模型补几张。</p>';
     return;
@@ -2578,6 +2792,171 @@ function openCards(tab) {
   renderCards();
   openModal("m-cards");
 }
+
+/* ================= 周目 ================= */
+var runSel = [];
+
+function perkQuota(no) { return Math.max(1, Math.min(3, 1 + (no - 1))); }
+
+function renderRunBadge(w) {
+  var el = $("p-run");
+  if (!el) return;
+  if (!w || !w.run || (w.run.no || 1) <= 1) { el.hidden = true; el.textContent = ""; return; }
+  el.hidden = false;
+  el.textContent = "第 " + w.run.no + " 周目";
+}
+
+function openRun() {
+  var w = current(); if (!w) return;
+  ensureCards(w);
+  closeModal("m-menu");
+  runSel = (w.run.perks || []).slice();
+  renderRun();
+  openModal("m-run");
+}
+
+function renderRun() {
+  var w = current(); if (!w) return;
+  ensureCards(w);
+  var r = w.run;
+  var no = (r.no || 1);
+  var nextNo = no + 1;
+  var quota = perkQuota(nextNo);
+  var perks = w.pack.perks || [];
+
+  $("run-h").textContent = "周目 · 能力";
+  $("run-top").textContent = perks.length
+    ? "现在是第 " + no + " 周目。开第 " + nextNo + " 周目时可以带 " + quota + " 个能力进场（已选 " + runSel.length + " / " + quota + "）。"
+    : "现在是第 " + no + " 周目。这部作品还没有能力卡——点下面的「让模型造几个」，或先用「从零生成」新建一部。";
+
+  var box = $("run-perks");
+  if (!perks.length) {
+    box.innerHTML = '<p class="empty" style="padding:12px 0">还没有能力卡。</p>';
+  } else {
+    box.innerHTML = perks.map(function (p) {
+      var on = runSel.indexOf(p.id) >= 0;
+      var used = (r.seen || []).indexOf(p.id) >= 0;
+      return '<div class="perk' + (on ? " on" : "") + '" data-pid="' + escHTML(p.id) + '">' +
+        '<i class="pk"></i>' +
+        '<div class="pt2"><div class="pn">' + escHTML(p.name) +
+        (p.tag ? '<span class="tag">' + escHTML(p.tag) + "</span>" : "") +
+        (used ? '<span class="used">上次用过</span>' : "") +
+        "</div>" + (p.desc ? '<div class="pd">' + escHTML(p.desc) + "</div>" : "") +
+        "</div></div>";
+    }).join("");
+  }
+  $("run-pick-label").textContent = "下一世带着哪些能力进场（最多 " + quota + " 个）";
+
+  var echoBox = $("run-echo");
+  var echoes = (r.echoes || []).slice(-6);
+  echoBox.innerHTML = echoes.length
+    ? echoes.map(function (e) { return "<div><i>·</i>" + escHTML(e) + "</div>"; }).join("")
+    : '<div style="color:#6f665f">还没有。走完一周目再开新周目，这里会记下上一世的样子。</div>';
+  $("run-new").disabled = !perks.length;
+}
+
+/* 开新周目 */
+function newRun(w) {
+  var r = w.run;
+  var perkIds = (runSel || []).slice(0, perkQuota((r.no || 1) + 1));
+  var echoes = (r.echoes || []).slice(-4);
+
+  /* 把这一世收进残影 */
+  if (w.summary) echoes.push("你隐约记得一个结局：" + cut(w.summary, 56));
+  var lastNarr = "";
+  (w.log || []).forEach(function (m) {
+    if (m.role === "narr" && m.text) lastNarr = m.text;
+  });
+  if (lastNarr) echoes.push("你隐约记得最后一幕：" + cut(lastNarr.replace(/\s+/g, ""), 40));
+  (w.pack.stats || []).slice(0, 3).forEach(function (st) {
+    var v = w.state ? w.state[st.key] : null;
+    if (typeof v === "number" && v > 0) {
+      echoes.push("「" + st.label + "」这件事，你好像早就经历过了。");
+    }
+  });
+
+  r.endings.push({ no: r.no, at: Date.now(), turns: w.turns || 0, state: JSON.parse(JSON.stringify(w.state || {})) });
+  if (r.endings.length > 12) r.endings = r.endings.slice(-12);
+  r.seen = (r.seen || []).concat(perkIds).filter(function (v, i, a) { return a.indexOf(v) === i; });
+  r.echoes = echoes.slice(-6);
+  r.perks = perkIds;
+  r.no = (r.no || 1) + 1;
+
+  /* 清这一世 */
+  (w.pack.stats || []).forEach(function (st) { w.state[st.key] = st.start; });
+  (w.pack.events || []).forEach(function (e) { e.used = false; });
+  w.log = [{ role: "narr", text: w.pack.opening.join("\n\n") }];
+  w.choices = [];
+  w.turns = 0;
+  w.summary = "";
+  w.facts = [];
+  w.snaps = [];
+  w.actors = {};
+  w.pending = null;
+  w.usage = { in: 0, out: 0 };
+  saveWorks();
+}
+
+$("run-close").onclick = function () { closeModal("m-run"); };
+$("run-new").onclick = function () {
+  var w = current(); if (!w) return;
+  if (!confirm("开始第 " + ((w.run.no || 1) + 1) + " 周目？现在的正文和属性会清空（人物卡、设定卡、主角卡保留）。")) return;
+  newRun(w);
+  closeModal("m-run");
+  openWork(w.id);
+  toast("第 " + w.run.no + " 周目，开始");
+};
+$("run-perks").onclick = function (e) {
+  var card = e.target.closest(".perk");
+  if (!card) return;
+  var w = current(); if (!w) return;
+  var pid = card.getAttribute("data-pid");
+  var quota = perkQuota((w.run.no || 1) + 1);
+  var at = runSel.indexOf(pid);
+  if (at >= 0) runSel.splice(at, 1);
+  else {
+    if (runSel.length >= quota) { toast("最多带 " + quota + " 个能力，先取消一个"); return; }
+    runSel.push(pid);
+  }
+  renderRun();
+};
+$("run-gen").onclick = function () {
+  var w = current(); if (!w) return;
+  var p = w.pack;
+  toast("正在按世界观造能力…");
+  llm([
+    {
+      role: "system",
+      content: "你是能力设计器。按这个世界的力量来源设计 8 个能力，供多周目挑选。" +
+        "每个都要和设定咬合，不要写成通用技能树；写清在什么场面能用、代价是什么、会留下什么痕迹。" +
+        "难度要有梯度：3 个是能立刻用的，3 个要付代价，2 个看着很香但会反噬。" +
+        "只输出 JSON：{\"perks\":[{\"name\":\"四到六字\",\"desc\":\"效果与代价，30 字内\",\"tag\":\"体质|预感|技艺|契约|血统\",\"tier\":1}]}"
+    },
+    {
+      role: "user",
+      content: JSON.stringify({
+        title: p.title, premise: p.premise, world: p.world,
+        rule: (p.rules || []).join("；"),
+        hero: p.hero, exist: p.perks.map(function (x) { return x.name; })
+      })
+    }
+  ], { temp: 0.95, timeout: 120000 }).then(function (raw) {
+    var d = parseJSON(raw);
+    if (!d || !Array.isArray(d.perks) || !d.perks.length) throw new Error("返回格式不对");
+    var have = {};
+    p.perks.forEach(function (x) { have[x.name] = 1; });
+    var base = p.perks.length;
+    d.perks.forEach(function (x) {
+      if (p.perks.length >= 16) return;
+      if (x && x.name && !have[x.name]) p.perks.push(normPerk(x, base++));
+    });
+    saveWorks();
+    renderRun();
+    toast("能力已补到 " + p.perks.length + " 个");
+  }).catch(function (e) {
+    toast("失败：" + (e.message || e));
+  });
+};
 
 /* ================= 导演面板 ================= */
 function openDirector() {
@@ -2821,6 +3200,8 @@ $("mm-delete").onclick = function () {
 };
 
 /* 卡片库 */
+$("mm-hero").onclick = function () { openCards("hero"); };
+$("mm-run").onclick = openRun;
 $("mm-chars").onclick = function () { openCards("char"); };
 $("mm-sets").onclick = function () { openCards("set"); };
 $("mm-dir").onclick = function () { openDirector(); };
@@ -2984,6 +3365,7 @@ $("ev-ai").onclick = function () {
     toast("失败：" + String(e.message || e).slice(0, 50));
   });
 };
+$("tab-hero").onclick = function () { cardsTab = "hero"; renderCards(); };
 $("tab-char").onclick = function () { cardsTab = "char"; renderCards(); };
 $("tab-set").onclick = function () { cardsTab = "set"; renderCards(); };
 $("card-close").onclick = function () { saveWorks(); closeModal("m-cards"); };
@@ -3000,6 +3382,20 @@ $("card-add").onclick = function () {
 $("card-list").addEventListener("input", function (e) {
   var w = current(); if (!w) return;
   var t = e.target;
+  var hf = t.getAttribute("data-hf");
+  if (hf) {
+    w.pack.hero = normHero(w.pack.hero || {});
+    w.pack.hero[hf] = t.value;
+    if (hf === "name" || hf === "identity") {
+      var det0 = t.closest("details");
+      if (det0) {
+        det0.querySelector("summary b").textContent = w.pack.hero.name || "你";
+        det0.querySelector("summary span").textContent = w.pack.hero.identity || "";
+      }
+    }
+    saveWorks();
+    return;
+  }
   var i = Number(t.getAttribute("data-i"));
   var f = t.getAttribute("data-f");
   if (!f || !isFinite(i)) return;
