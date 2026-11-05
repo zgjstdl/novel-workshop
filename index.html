@@ -135,12 +135,26 @@
   .choice .cm{display:flex;align-items:center;gap:7px;font-size:11px;line-height:1.5;color:#7d7263}
   .choice .cm .k{font-style:normal;letter-spacing:.08em;padding:1px 6px;border-radius:4px;
     background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.22);color:#b99b52}
+  .choice .cm .k.direct{background:rgba(201,162,39,.28);border-color:rgba(201,162,39,.62);color:#f0d79a}
   .choice:hover .cm{color:#94887a}
   .choice:hover{background:rgba(201,162,39,.14);border-color:rgba(201,162,39,.6);transform:translateX(3px)}
   .choice[disabled]{opacity:.45;cursor:default;transform:none}
 
   .composer{position:sticky;bottom:0;padding:8px 0 4px;background:linear-gradient(180deg,rgba(11,8,16,0),#0b0810 34%)}
   .row{display:flex;gap:9px}
+  .spotbar{display:flex;align-items:center;gap:7px;margin:0 0 7px;padding:4px 9px;
+    border-radius:9px;background:rgba(201,162,39,.05);border:1px solid rgba(201,162,39,.2);
+    transition:.15s}
+  .spotbar .sp-lab{flex:0 0 auto;font-size:11px;letter-spacing:.14em;color:#a98d48}
+  .spotbar input{flex:1 1 auto;min-width:0;background:none;border:0;outline:0;font-family:inherit;
+    font-size:12.5px;color:#e8d9b6;padding:3px 0}
+  .spotbar input::placeholder{color:#6d6357}
+  .spotbar.on{background:rgba(201,162,39,.11);border-color:rgba(201,162,39,.46)}
+  .spotbar.on .sp-lab{color:#e2b866}
+  .spotbar .sp-x{flex:0 0 auto;background:none;border:0;color:#7c7264;font-size:13px;cursor:pointer;
+    font-family:inherit;padding:0 2px;display:none}
+  .spotbar.on .sp-x{display:block}
+  .spotbar .sp-x:hover{color:#e8b39a}
   textarea{flex:1;resize:none;height:60px;padding:10px 12px;font-family:inherit;font-size:15px;line-height:1.6;
     color:#e8dcc8;background:#151019;border:1px solid rgba(201,162,39,.24);border-radius:10px;outline:none}
   textarea:focus{border-color:rgba(201,162,39,.6)}
@@ -366,6 +380,11 @@
   <main id="p-log"></main>
   <div class="choices" id="p-choices"></div>
   <div class="composer">
+    <div class="spotbar" id="spotbar">
+      <span class="sp-lab">重点</span>
+      <input id="p-spot" maxlength="120" placeholder="这一轮想逼出什么？（例：让她承认昨晚在琴房）">
+      <button class="sp-x" id="spot-clear" type="button" title="清空重点">✕</button>
+    </div>
     <div class="row">
       <textarea id="p-input" placeholder="你想做什么？（Ctrl+Enter 发送）"></textarea>
       <button id="p-send">行动</button>
@@ -527,6 +546,11 @@
 <div class="modal" id="m-rate">
   <div class="sheet wide">
     <h2>尺度与写法</h2>
+    <div class="field">
+      <label>剧情节奏</label>
+      <div id="pace-list" class="chiprow"></div>
+      <div class="hintline">节奏只改事件密度，不改篇幅。正文下方的「重点」框写了什么，模型就朝什么方向推。</div>
+    </div>
     <div class="field">
       <label>尺度档位</label>
       <div id="rate-list" class="rate-list"></div>
@@ -972,6 +996,32 @@ var FOCUS_LIST = [
   { k: "talk", label: "对白" }
 ];
 
+/* ================= 剧情节奏（推进速度） ================= */
+var PACE_LIST = [
+  { k: "slow", label: "慢镜", desc: "一场戏写透，但每轮仍要有硬进展" },
+  { k: "normal", label: "正常", desc: "一轮一件事，稳步往下走" },
+  { k: "fast", label: "快进", desc: "一轮两件事，砍掉铺垫与过渡" },
+  { k: "rush", label: "狂推", desc: "直接跳到下一个冲突点，只写结果与后果" }
+];
+var PACE_KEYS = PACE_LIST.map(function (x) { return x.k; });
+
+var PACE_RULE = {
+  slow: "节奏：慢镜。允许在一个场景里停留，但这一轮仍必须交付一个不可逆的变化（她改口了、东西被拿走了、关系变了格、有人知道了）。不许原地打转地重复情绪。",
+  normal: "节奏：正常。一轮推进一件事，从开场到结尾必须跨过一步：拿到新信息、逼出新态度、出现新裂缝。",
+  fast: "节奏：快进。一轮至少两件事：一件是玩家动作的直接结果，一件是从外部砸进来的新变化（电话、来人、被撞见、时限提前）。铺垫、过渡、环境描写各最多一句，其余全部砍掉。结尾必须比开头更危险或更亲近。",
+  rush: "节奏：狂推。不写玩家动作的中间过程，直接给结果和后果；一轮内让局面翻一次（谁占了上风、谁知道秘密、谁被逼到墙角、谁先低头）。禁止停顿、禁止等待、禁止「还没想好」。"
+};
+
+function paceOf(p) {
+  var k = p && p.pace;
+  return PACE_KEYS.indexOf(k) >= 0 ? k : "fast";
+}
+
+function paceLabel(k) {
+  for (var i = 0; i < PACE_LIST.length; i++) if (PACE_LIST[i].k === k) return PACE_LIST[i].label;
+  return "快进";
+}
+
 var LEXICON_TEXT = {
   plain: "器官与动作直接叫名字，不回避、不美化、不用隐喻遮掩。",
   literary: "用有质感的意象和长句，避开粗词，但动作与感受仍要写清。",
@@ -1057,6 +1107,7 @@ function normalizePack(p, fallbackTitle) {
     world: p.world || "",
     style: p.style || "第二人称，感官细节充足，句子长短交错。",
     rating: RATING_KEYS.indexOf(p.rating) >= 0 ? p.rating : "explicit",
+    pace: PACE_KEYS.indexOf(p.pace) >= 0 ? p.pace : "fast",
     focus: Array.isArray(p.focus) ? p.focus.filter(function (k) { return FOCUS_TEXT[k]; }).slice(0, 5) : [],
     lexicon: LEXICON_TEXT[p.lexicon] ? p.lexicon : "plain",
     limits: String(p.limits || "").slice(0, 300),
@@ -1085,6 +1136,7 @@ function createWork(pack) {
     id: uid(),
     pack: pack,
     state: {},
+    spot: "",
     log: [],
     choices: [],
     summary: "",
@@ -1477,6 +1529,7 @@ function openWork(id) {
   $("p-input").disabled = false;
   $("p-title").textContent = w.pack.title;
   $("p-sub").textContent = w.pack.subtitle || "";
+  renderSpot();
   renderStats();
   renderRunBadge(w);
   renderLog();
@@ -1623,7 +1676,7 @@ function renderChoices() {
       m.className = "cm";
       if (c.k) {
         var kk = document.createElement("i");
-        kk.className = "k";
+        kk.className = "k" + (c.k === "直取" ? " direct" : "");
         kk.textContent = c.k;
         m.appendChild(kk);
       }
@@ -1689,6 +1742,16 @@ function updateMode() {
   var u = w ? usageText(w) : "";
   if (u) line += "　·　" + u;
   $("p-mode").textContent = line;
+}
+
+/* 本轮重点输入框：跟着作品走，跨轮保留，直到手动清空 */
+function renderSpot() {
+  var w = current();
+  var inp = $("p-spot"), bar = $("spotbar");
+  if (!inp || !bar) return;
+  var s = w ? spotOf(w) : "";
+  inp.value = s;
+  bar.classList.toggle("on", !!s);
 }
 
 /* ================= 回合 ================= */
@@ -1868,6 +1931,50 @@ function runBlock(w) {
   return out.join("\n");
 }
 
+/* ============ 本轮重点 / 推进纪律 ============ */
+function spotOf(w) {
+  return String((w && w.spot) || "").trim().slice(0, 120);
+}
+
+function spotBlock(w) {
+  var s = spotOf(w);
+  if (!s) return "";
+  return [
+    "【本轮重点 · 最高优先级】「" + s + "」",
+    "· 这一轮的场景、对白、动作、选项全部为它服务。它是这一轮必须交付的结果，不许留到下一轮。",
+    "· 当前场景没法直接达成，就把局面推到「下一步就能达成」的位置：让该到场的人到场、让筹码出现、让阻力先亮出来。",
+    "· 正文里至少正面触碰它一次——提出、试探、逼迫、交换、动手，任选其一，写具体。",
+    "· 选项里至少两个是朝它去的不同打法，一个稳、一个狠。",
+    "· 不要讨论、复述或解释这条要求本身，直接照着写。"
+  ].join("\n");
+}
+
+function lastTail(w) {
+  var tail = "";
+  for (var i = w.log.length - 1; i >= 0; i--) {
+    if (w.log[i].role === "narr") { tail = String(w.log[i].text || ""); break; }
+  }
+  if (!tail) return "";
+  return "【上一轮结尾（从这里往下接；禁止复述、禁止重写同一个动作或同一句台词）】\n" + tail.slice(-160);
+}
+
+function paceBlock(w) {
+  var k = paceOf(w.pack);
+  var n = (Number(w.turns) || 0) + 1;
+  var every = k === "rush" ? 1 : (k === "fast" ? 2 : 3);
+  return [
+    "【推进纪律 · 硬性，违反即算这一轮失败】",
+    "· " + (PACE_RULE[k] || PACE_RULE.fast),
+    "· 每一轮都必须发生一件不可逆的事：话已出口收不回、东西被给出或夺走、关系变一格、秘密漏了一点、有人到场或离开。没有这种事的回合等于白写。",
+    "· 禁止重复上一轮出现过的人、动作、意象、句式和台词；同一个动作不许做第二遍。",
+    "· 禁止空转句：「时间一分一秒过去」「空气安静下来」「你还没决定」「气氛变得微妙」「不知过了多久」。出现就删。",
+    "· 过渡（走路、开门、穿衣、寒暄、复述前情）一次最多一句，用分号带过。",
+    "· 对白与动作占正文七成以上；心理、解释、环境合起来不超过一段。",
+    "· 结尾必须停在新局面上：新问题、新威胁、新邀请、新把柄、新代价。不许停在原地，不许总结。",
+    "· 这一轮是第 " + n + " 轮；每 " + every + " 轮至少要有一个阶段成果落地（拿到东西／套出话／关系升级／甩掉某人／弄清一个真相）。到点没落地，就在这一轮强行落地。"
+  ].join("\n");
+}
+
 function buildSystem(w) {
   var st = w.pack.stats.map(function (s) {
     return s.label + " " + (w.state[s.key] || 0) + "/" + (s.max || 100);
@@ -1880,6 +1987,7 @@ function buildSystem(w) {
   var p = w.pack;
   return [
     "你是一部互动小说的叙事引擎，用第二人称现在时续写，主角是「你」。",
+    spotBlock(w),
     "作品：" + p.title + "（" + p.genre + "）",
     p.premise ? "主线：" + p.premise : "",
     p.world ? "世界观：" + p.world : "",
@@ -1894,11 +2002,14 @@ function buildSystem(w) {
     w.summary ? "前情提要：" + w.summary : "",
     facts.length ? "已发生的事实（必须遵守，不要遗忘，也不要重复叙述）：\n" + facts.map(function (f) { return "· " + cut(f, 60); }).join("\n") : "",
     "写作要求：",
+    paceBlock(w),
+    lastTail(w),
     "· " + lengthRule() + " 不替玩家做决定，不跳场景，不写「你感到」「这一刻」这类空转句。",
     "· 篇幅不够时，用动作、对白、环境来填充，禁止用解释和总结凑字数。",
     ratingBlock(p),
     "· 若玩家的动作导致状态变化，给出 delta；没有变化就给空对象。单项单轮涨幅不超过该属性上限的 20%，境界一次只升一级；受伤可以掉得更多。",
-    "· 每轮给 3 到 5 个选项，必须覆盖三种走向：一个「推进」（直接把局面往下推）、一个「代价」（做了要付代价、冒险或激怒某人）、一个「关系」（针对在场某个人的情感、试探或索取）。可以再加「观察」或「逃离」，但不要为了凑数硬编。",
+    "· 每轮给 3 到 5 个选项。第一个固定是「直取」——把本轮重点／玩家意图直接往前顶的一步，收益最大、最容易翻车；剩下的至少覆盖「代价」（做了要付代价、冒险或激怒某人）和「关系」（针对在场某个人的情感、试探或索取）。宁少不滥，绝不许三个都是同一方向的变体。",
+    "· 选项要短：t 不超过 22 字，只写动作和对象，不写理由、不写心理。",
     "· 选项必须从这一轮正文里的具体人、物、动作里长出来，写清对谁做什么。例：「按住她的手腕，把袖子往上推一截」。禁止写「继续」「观察四周」「开口说话」这类放在任何场景都成立的空话。",
     "· 选项之间的后果必须真的不同：不同的对象、不同的风险、不同的收益。不要给三个同一方向的变体。",
     "· 输出顺序固定：先 META，再正文。先想清楚数值和选项再动笔，比写到最后再补更可靠。",
@@ -1925,7 +2036,7 @@ function metaSchema(w) {
   var k0 = (w.pack.stats[0] && w.pack.stats[0].key) || "hp";
   return [
     "{",
-    "\"choices\":[{\"t\":\"选项正文，写到动作和对象\",\"k\":\"推进|代价|关系|观察|逃离|交涉|情欲\",\"d\":\"会导向什么，15字内\"}],",
+    "\"choices\":[{\"t\":\"选项正文，写到动作和对象\",\"k\":\"直取|推进|代价|关系|观察|逃离|交涉|情欲\",\"d\":\"会导向什么，15字内\"}],",
     "\"delta\":{\"" + k0 + "\":0},",
     "\"quest\":{\"goal\":\"这一轮最要紧的目标，动宾短语，14字内\",\"need\":\"还差什么才能达成，12字内\",",
     "\"risk\":\"谁或什么在逼近，14字内\",\"clock\":\"局势推进到哪一步，写具体，16字内\",",
@@ -2014,6 +2125,8 @@ function fallbackChoices(w) {
     }
   }
   if (q && q.goal) out.push({ t: "先把「" + cut(q.goal, 14) + "」办到底", k: "推进", d: "照原计划走一步" });
+  var sp = spotOf(w);
+  if (sp) out.unshift({ t: cut(sp, 22), k: "直取", d: "直接往这一步上逼" });
   if (ally) out.push({ t: "低声问" + cut(ally.name, 6) + "一句", k: "关系", d: "她会说出更多" });
   if (foe) out.push({ t: "先稳住" + cut(foe.name, 6) + "，看他想要什么", k: "交涉", d: "会暴露你的位置" });
   var generic = [
@@ -2312,9 +2425,13 @@ function submit(text) {
 
   var sysText = buildSystem(w);
   llmLastUsage = null;
+  var spot = spotOf(w);
+  var ask = "【玩家行动】" + text +
+    (spot ? "\n【本轮重点 · 必须交付】" + spot : "") +
+    "\n【本轮要求】直接往下推，不许原地打转、不许复述上一轮。先 META，再正文，最后 3-5 个选项（第一个是直取）。";
   var msgs = [{ role: "system", content: sysText }]
     .concat(hist)
-    .concat([{ role: "user", content: "【玩家行动】" + text + "\n请续写并给出三个选项。" }]);
+    .concat([{ role: "user", content: ask }]);
 
   var lastPaint = 0, prep = null;
   function showPrep(on) {
@@ -3431,6 +3548,20 @@ function renderRateList(p) {
     fb.appendChild(b);
   });
 
+  var pk = paceOf(p);
+  var pb = $("pace-list");
+  if (pb) {
+    pb.innerHTML = "";
+    PACE_LIST.forEach(function (x) {
+      var b = document.createElement("button");
+      b.className = "chip" + (pk === x.k ? " on" : "");
+      b.textContent = x.label;
+      b.title = x.desc;
+      b.onclick = function () { p.pace = x.k; saveWorks(); renderRateList(p); };
+      pb.appendChild(b);
+    });
+  }
+
   var lex = p.lexicon || "plain";
   var lb = $("lex-list");
   lb.innerHTML = "";
@@ -3672,6 +3803,23 @@ $("p-send").onclick = function () { submit($("p-input").value); };
 $("p-input").addEventListener("keydown", function (e) {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit($("p-input").value); }
 });
+
+/* 本轮重点：边打字边存，跨轮保留；✕ 清空 */
+var spotTimer = null;
+$("p-spot").addEventListener("input", function () {
+  var w = current(); if (!w) return;
+  w.spot = this.value.slice(0, 160);
+  $("spotbar").classList.toggle("on", !!this.value.trim());
+  clearTimeout(spotTimer);
+  spotTimer = setTimeout(saveWorks, 400);
+});
+$("p-spot").addEventListener("keydown", function (e) {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit($("p-input").value); }
+});
+$("spot-clear").onclick = function () {
+  var w = current(); if (!w) return;
+  w.spot = ""; $("p-spot").value = ""; $("spotbar").classList.remove("on"); saveWorks();
+};
 
 document.querySelectorAll(".modal").forEach(function (m) {
   m.addEventListener("click", function (e) { if (e.target === m) m.classList.remove("open"); });
