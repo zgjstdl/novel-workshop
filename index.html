@@ -193,6 +193,14 @@
   .perk .pt2{flex:1 1 auto;min-width:0}
   .perk .pn{font-size:14px;color:#f0e6d2;display:flex;gap:7px;align-items:baseline;flex-wrap:wrap}
   .perk .pd{font-size:12px;color:#948a80;line-height:1.65;margin-top:3px}
+  .perk .tier{display:inline-block;margin-left:6px;padding:0 6px;border-radius:3px;font-size:10px;
+    letter-spacing:.04em;border:1px solid rgba(255,255,255,.12);color:#9a938a}
+  .perk .tier.t1{color:#8f877c;border-color:rgba(150,140,125,.35)}
+  .perk .tier.t2{color:#7fae8a;border-color:rgba(110,170,125,.4)}
+  .perk .tier.t3{color:#84a7d8;border-color:rgba(110,150,215,.45)}
+  .perk .tier.t4{color:#d3a35f;border-color:rgba(210,160,90,.5)}
+  .perk .tier.t5{color:#d97a72;border-color:rgba(215,110,100,.55);
+    background:rgba(150,60,55,.14)}
   .perk .tag{font-size:10px;padding:1px 6px;border-radius:6px;color:#c9a227;
     background:rgba(201,162,39,.13);letter-spacing:.05em}
   .perk .used{font-size:10px;color:#7c736b}
@@ -521,6 +529,7 @@
     </div>
     <div class="hintline">开新周目会清空正文、属性、状态栏和回退记录；人物卡、设定卡、事件、主角卡保留。旧周目的结尾会变成「前世残影」。</div>
     <div class="actions2">
+      <button id="run-roll">🔄 重抽候选</button>
       <button id="run-gen">让模型造几个能力</button>
       <button id="run-new" class="primary">开始新周目</button>
       <button id="run-close">关闭</button>
@@ -1097,7 +1106,11 @@ var GUI_PERKS = [
   { name: "刺骨之吸", desc: "把对手往骨刺上吸，反伤照单全收——自己也得挨那一下", tag: "技艺", tier: 3 },
   { name: "地王神印", desc: "四爪按地稳如钉死的山，代价是起身极慢，躲不开", tag: "契约", tier: 3 },
   { name: "归墟神境", desc: "体内藏着一百平方的随身空间，一次只能开一小会儿", tag: "预感", tier: 4 },
-  { name: "虚空暗杀术", desc: "破防切喉，但对高出两个大境界的人无效", tag: "血统", tier: 4 }
+  { name: "虚空暗杀术", desc: "破防切喉，但对高出两个大境界的人无效", tag: "血统", tier: 4 },
+  { name: "龟息", desc: "一口气能屏上半炷香，装死骗得过大多数妖兽，骗不过已经盯上你的", tag: "体质", tier: 1 },
+  { name: "断壳", desc: "舍掉一块壳甲换一次脱身，那块壳这辈子都长不回来", tag: "血统", tier: 2 },
+  { name: "兽语", desc: "听得懂妖兽的话；代价是你心里想的，它们也听得见", tag: "预感", tier: 3 },
+  { name: "血月降临", desc: "一次呼吸把方圆百米压成血月之夜，之后七天吞不下任何东西", tag: "契约", tier: 5 }
 ];
 
 var SEEDS = [
@@ -2672,6 +2685,8 @@ function ensureCards(w) {
   if (!Array.isArray(w.run.echoes)) w.run.echoes = [];
   if (!Array.isArray(w.run.endings)) w.run.endings = [];
   if (!Array.isArray(w.run.seen)) w.run.seen = [];
+  if (!Array.isArray(w.run.cand)) w.run.cand = [];
+  if (typeof w.run.reroll !== "number") w.run.reroll = 2;
   if (!w.run.no) w.run.no = 1;
   if (!w.actors || typeof w.actors !== "object") w.actors = {};
   if (!Array.isArray(w.facts)) w.facts = [];
@@ -2795,6 +2810,50 @@ function openCards(tab) {
 
 /* ================= 周目 ================= */
 var runSel = [];
+var TIER_NAME = { 1: "普通", 2: "精良", 3: "稀有", 4: "史诗", 5: "神话" };
+var TIER_WEIGHT = { 1: 34, 2: 26, 3: 16, 4: 7, 5: 3 };
+var CAND_N = 6;
+var REROLL = 2;
+
+function perkTier(p) { var t = Math.round(Number(p && p.tier) || 1); return t < 1 ? 1 : (t > 5 ? 5 : t); }
+function tierName(p) { return TIER_NAME[perkTier(p)] || "普通"; }
+
+function perkWeight(p, seen) {
+  var w = TIER_WEIGHT[perkTier(p)] || 12;
+  if (seen && seen.indexOf(p.id) >= 0) w = Math.max(1, Math.round(w * 0.35));
+  return w;
+}
+
+/* 按稀有度加权，从能力池里无放回抽 CAND_N 个 */
+function rollCandidates(w) {
+  var pool = (w.pack.perks || []).slice();
+  if (!pool.length) return [];
+  var seen = (w.run && w.run.seen) || [];
+  var need = Math.min(CAND_N, pool.length);
+  var out = [], guard = 0;
+  while (out.length < need && guard++ < 800) {
+    var total = 0, i, p;
+    for (i = 0; i < pool.length; i++) {
+      if (out.indexOf(pool[i].id) >= 0) continue;
+      total += perkWeight(pool[i], seen);
+    }
+    if (total <= 0) break;
+    var x = Math.random() * total, acc = 0, hit = null;
+    for (i = 0; i < pool.length; i++) {
+      if (out.indexOf(pool[i].id) >= 0) continue;
+      acc += perkWeight(pool[i], seen);
+      if (x <= acc) { hit = pool[i]; break; }
+    }
+    if (!hit) break;
+    out.push(hit.id);
+  }
+  out.sort(function (a, b) {
+    var pa = null, pb = null;
+    pool.forEach(function (q) { if (q.id === a) pa = q; if (q.id === b) pb = q; });
+    return perkTier(pb) - perkTier(pa);
+  });
+  return out;
+}
 
 function perkQuota(no) { return Math.max(1, Math.min(3, 1 + (no - 1))); }
 
@@ -2825,27 +2884,51 @@ function renderRun() {
   var perks = w.pack.perks || [];
 
   $("run-h").textContent = "周目 · 能力";
-  $("run-top").textContent = perks.length
-    ? "现在是第 " + no + " 周目。开第 " + nextNo + " 周目时可以带 " + quota + " 个能力进场（已选 " + runSel.length + " / " + quota + "）。"
-    : "现在是第 " + no + " 周目。这部作品还没有能力卡——点下面的「让模型造几个」，或先用「从零生成」新建一部。";
+
+  /* 抽卡：每开一次面板，若没有候选就抽一批 */
+  if (!Array.isArray(r.cand)) r.cand = [];
+  if (typeof r.reroll !== "number") r.reroll = REROLL;
+  var dirty = false;
+  if (perks.length && !r.cand.length) { r.cand = rollCandidates(w); dirty = true; }
+  var cand = (r.cand || []).map(function (id) {
+    var hit = null;
+    perks.forEach(function (p) { if (p.id === id) hit = p; });
+    return hit;
+  }).filter(Boolean);
+  if (dirty) saveWorks();
+
+  $("run-top").textContent = !perks.length
+    ? "现在是第 " + no + " 周目。这部作品还没有能力卡——点下面的「让模型造几个」，或先用「从零生成」新建一部。"
+    : (perks.length <= CAND_N
+      ? "现在是第 " + no + " 周目。池子里只有 " + perks.length + " 个能力，全部摆上来了。开第 " + nextNo + " 周目可以带 " + quota + " 个进场（已选 " + runSel.length + " / " + quota + "）。"
+      : "现在是第 " + no + " 周目。这一世抽到 " + cand.length + " 个候选（池中 " + perks.length + " 个）。开第 " + nextNo + " 周目可以带 " + quota + " 个进场（已选 " + runSel.length + " / " + quota + "）。");
 
   var box = $("run-perks");
   if (!perks.length) {
     box.innerHTML = '<p class="empty" style="padding:12px 0">还没有能力卡。</p>';
   } else {
-    box.innerHTML = perks.map(function (p) {
+    box.innerHTML = cand.map(function (p) {
       var on = runSel.indexOf(p.id) >= 0;
       var used = (r.seen || []).indexOf(p.id) >= 0;
-      return '<div class="perk' + (on ? " on" : "") + '" data-pid="' + escHTML(p.id) + '">' +
+      var t = perkTier(p);
+      return '<div class="perk t' + t + (on ? " on" : "") + '" data-pid="' + escHTML(p.id) + '">' +
         '<i class="pk"></i>' +
         '<div class="pt2"><div class="pn">' + escHTML(p.name) +
+        '<span class="tier t' + t + '">' + escHTML(tierName(p)) + "</span>" +
         (p.tag ? '<span class="tag">' + escHTML(p.tag) + "</span>" : "") +
         (used ? '<span class="used">上次用过</span>' : "") +
         "</div>" + (p.desc ? '<div class="pd">' + escHTML(p.desc) + "</div>" : "") +
         "</div></div>";
     }).join("");
   }
-  $("run-pick-label").textContent = "下一世带着哪些能力进场（最多 " + quota + " 个）";
+  var rollBtn = $("run-roll");
+  if (rollBtn) {
+    rollBtn.disabled = !perks.length || perks.length <= CAND_N || (r.reroll || 0) <= 0;
+    rollBtn.textContent = (r.reroll || 0) > 0
+      ? "🔄 重抽候选（剩 " + r.reroll + " 次）"
+      : "🔄 重抽已用完";
+  }
+  $("run-pick-label").textContent = "从抽到的候选里挑（最多 " + quota + " 个）";
 
   var echoBox = $("run-echo");
   var echoes = (r.echoes || []).slice(-6);
@@ -2881,6 +2964,8 @@ function newRun(w) {
   r.echoes = echoes.slice(-6);
   r.perks = perkIds;
   r.no = (r.no || 1) + 1;
+  r.cand = [];
+  r.reroll = REROLL;
 
   /* 清这一世 */
   (w.pack.stats || []).forEach(function (st) { w.state[st.key] = st.start; });
@@ -2898,6 +2983,17 @@ function newRun(w) {
 }
 
 $("run-close").onclick = function () { closeModal("m-run"); };
+$("run-roll").onclick = function () {
+  var w = current(); if (!w) return;
+  var r = w.run;
+  if ((r.reroll || 0) <= 0) { toast("这一世的重抽用完了"); return; }
+  r.reroll -= 1;
+  r.cand = rollCandidates(w);
+  runSel = [];
+  saveWorks();
+  renderRun();
+  toast("换了一批，重抽还剩 " + r.reroll + " 次");
+};
 $("run-new").onclick = function () {
   var w = current(); if (!w) return;
   if (!confirm("开始第 " + ((w.run.no || 1) + 1) + " 周目？现在的正文和属性会清空（人物卡、设定卡、主角卡保留）。")) return;
@@ -2950,9 +3046,10 @@ $("run-gen").onclick = function () {
       if (p.perks.length >= 16) return;
       if (x && x.name && !have[x.name]) p.perks.push(normPerk(x, base++));
     });
+    w.run.cand = rollCandidates(w);
     saveWorks();
     renderRun();
-    toast("能力已补到 " + p.perks.length + " 个");
+    toast("能力已补到 " + p.perks.length + " 个，候选已重抽");
   }).catch(function (e) {
     toast("失败：" + (e.message || e));
   });
