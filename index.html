@@ -163,7 +163,12 @@
     overscroll-behavior:contain;padding:2px 2px 10px;scroll-behavior:smooth}
   #p-log::-webkit-scrollbar{width:5px}
   #p-log::-webkit-scrollbar-thumb{background:rgba(201,162,39,.22);border-radius:3px}
-  #p-choices{flex:0 1 auto;min-width:0;max-height:46vh;overflow-y:auto;overscroll-behavior:contain}
+  #p-choices{flex:0 0 auto;min-width:0;max-height:40vh;overflow-y:auto;overscroll-behavior:contain;
+    padding-right:2px;scrollbar-width:thin}
+  #p-log{flex:1 1 auto;overflow-y:auto;min-height:120px}
+  #p-choices::-webkit-scrollbar{width:6px}
+  #p-choices::-webkit-scrollbar-thumb{background:rgba(201,162,39,.28);border-radius:3px}
+  #p-choices::-webkit-scrollbar-track{background:transparent}
   #p-choices:empty{display:none}
   #play .composer{position:static;flex:0 0 auto;padding:8px 0 2px;background:none;min-width:0}
   #play .footnote{padding:2px 0 0}
