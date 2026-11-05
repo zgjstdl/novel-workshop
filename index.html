@@ -102,6 +102,14 @@
   .castpanel .c .pt i{font-style:normal;color:#c9b48c;letter-spacing:.04em}
   .castpanel .c .sexlin{margin-top:6px;padding:5px 8px;border-radius:5px;font-size:10.5px;line-height:1.65;
     color:#c99a9a;background:rgba(176,84,96,.09);border-left:2px solid rgba(200,110,120,.45)}
+  .castpanel .cbar{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;
+    margin:-3px 0 0;padding:2px 0;line-height:1.4}
+  .castpanel .cbar:hover .ct{color:#e8cf9d}
+  .castpanel .carw{font-size:9px;color:#6d6152;width:9px;text-align:center}
+  .castpanel .ct{font-size:10px;letter-spacing:.2em;color:#8a7d68;transition:color .15s}
+  .castpanel .cs{font-size:11px;color:#6b6252;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .castpanel.collapsed{padding-top:7px;padding-bottom:7px}
+  .castpanel.collapsed .cbody{display:none}
   .castpanel[data-stale]{opacity:.84}
   .castpanel .c.hostile{border-color:rgba(224,86,47,.32);background:rgba(179,64,47,.07)}
   .castpanel .c.hostile .at{color:#e0562f}
@@ -384,6 +392,7 @@
       <button id="mm-sets">设定卡</button>
       <button id="mm-dir">导演 · NPC 与事件</button>
       <button id="mm-rate">尺度与写法</button>
+      <button id="mm-cast">状态栏 · 展开/收起</button>
       <button id="mm-undo">退回上一轮</button>
       <button id="mm-redo">重掷上一段</button>
       <button id="mm-reopen">重写开场</button>
@@ -519,9 +528,12 @@ function uid() { return "w" + Date.now().toString(36) + Math.random().toString(3
 function loadCfg() {
   try {
     var c = JSON.parse(localStorage.getItem("jw-cfg") || "null");
-    if (c && c.base) return c;
+    if (c && c.base) {
+      if (typeof c.castOpen !== "boolean") c.castOpen = true;
+      return c;
+    }
   } catch (e) {}
-  return { base: "", key: "", model: "", temp: 0.9, len: 2, maxTok: 2048 };
+  return { base: "", key: "", model: "", temp: 0.9, len: 2, maxTok: 2048, castOpen: true };
 }
 function saveCfg() {
   try { localStorage.setItem("jw-cfg", JSON.stringify(cfg)); } catch (e) {}
@@ -1290,7 +1302,12 @@ function renderLog() {
     if (e.role === "cast") {
       var cd = null;
       try { cd = JSON.parse(e.text); } catch (err) { cd = null; }
-      if (cd) { box.appendChild(castNode(cd.quest, cd.cast, cd.stale)); continue; }
+      if (cd) {
+        var cn = castNode(cd.quest, cd.cast, cd.stale);
+        var cb2 = cn.querySelector(".cbody");
+        if (cb2 && cb2.childNodes.length) box.appendChild(cn);
+        continue;
+      }
     }
     box.appendChild(makeMsg(e.role, e.text));
   }
@@ -1593,6 +1610,8 @@ function castNode(quest, cast, stale) {
     return el;
   }
 
+  var body = mk("div", "cbody");
+
   if (quest && (quest.goal || quest.need || quest.risk)) {
     var q = mk("div", "quest");
     if (quest.goal) {
@@ -1607,7 +1626,7 @@ function castNode(quest, cast, stale) {
       q.appendChild(mk("span", "lab", "威胁"));
       q.appendChild(mk("span", "risk", quest.risk));
     }
-    wrap.appendChild(q);
+    body.appendChild(q);
   }
 
   var list = (cast || []).filter(function (c) { return c && c.name; }).slice(0, 4);
@@ -1639,14 +1658,46 @@ function castNode(quest, cast, stale) {
 
       box.appendChild(cell);
     });
-    wrap.appendChild(box);
+    body.appendChild(box);
   }
+
+  /* 折叠条：收起后仍能看到任务与在场人数 */
+  var sum = [];
+  if (quest && quest.goal) sum.push(String(quest.goal));
+  if (list.length) sum.push(list.length + " 人");
+  var bar = mk("div", "cbar");
+  var arrow = mk("span", "carw", "▾");
+  bar.appendChild(arrow);
+  bar.appendChild(mk("span", "ct", "状态"));
+  if (sum.length) bar.appendChild(mk("span", "cs", sum.join(" · ")));
+
+  function apply() {
+    var collapsed = !cfg.castOpen;
+    wrap.classList.toggle("collapsed", collapsed);
+    arrow.textContent = collapsed ? "▸" : "▾";
+  }
+  apply();
+
+  bar.addEventListener("click", function (e) {
+    e.stopPropagation();
+    cfg.castOpen = !cfg.castOpen;
+    saveCfg();
+    document.querySelectorAll("#p-log .castpanel").forEach(function (p) {
+      var a = p.querySelector(".carw");
+      p.classList.toggle("collapsed", !cfg.castOpen);
+      if (a) a.textContent = cfg.castOpen ? "▾" : "▸";
+    });
+  });
+
+  wrap.appendChild(bar);
+  wrap.appendChild(body);
   return wrap;
 }
 
 function appendCast(quest, cast, stale) {
   var node = castNode(quest, cast, stale);
-  if (!node.childNodes.length) return;
+  var body = node.querySelector(".cbody");
+  if (!body || !body.childNodes.length) return;
   $("p-log").appendChild(node);
   scrollLog(true);
 }
@@ -2423,6 +2474,17 @@ function openRate() {
 }
 
 $("mm-rate").onclick = function () { closeModal("m-menu"); openRate(); };
+$("mm-cast").onclick = function () {
+  closeModal("m-menu");
+  cfg.castOpen = !cfg.castOpen;
+  saveCfg();
+  document.querySelectorAll("#p-log .castpanel").forEach(function (p) {
+    var a = p.querySelector(".carw");
+    p.classList.toggle("collapsed", !cfg.castOpen);
+    if (a) a.textContent = cfg.castOpen ? "▾" : "▸";
+  });
+  toast(cfg.castOpen ? "状态栏已展开" : "状态栏已收起");
+};
 $("rate-close").onclick = function () { closeModal("m-rate"); };
 $("rate-limits").oninput = function () {
   var w = current();
